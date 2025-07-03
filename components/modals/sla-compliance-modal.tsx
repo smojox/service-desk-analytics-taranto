@@ -54,6 +54,28 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
       actualHours = Math.round((new Date().getTime() - created.getTime()) / (1000 * 60 * 60))
     }
     
+    // Determine if ticket is breached based on business rules
+    let isBreached = false
+    
+    if (ticket.resolutionStatus === 'Within SLA') {
+      isBreached = false
+    } else if (ticket.resolutionStatus === 'SLA Violated') {
+      isBreached = true
+    } else if (!ticket.resolutionStatus || ticket.resolutionStatus.trim() === '') {
+      // If resolution status is blank, check due date and status
+      if (ticket.status === 'Pending' || ticket.status === 'Pending - Close') {
+        isBreached = false // Assume still within SLA
+      } else {
+        // Check if due date has been reached
+        const dueDate = new Date(ticket.dueByTime)
+        const now = new Date()
+        isBreached = now > dueDate
+      }
+    } else {
+      // Default case - use time calculation
+      isBreached = actualHours > slaHours
+    }
+    
     return {
       ticketId: ticket.ticketId,
       subject: ticket.subject || 'No Subject',
@@ -63,7 +85,7 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
       resolvedTime: ticket.resolvedTime,
       slaHours,
       actualHours,
-      isBreached: actualHours > slaHours,
+      isBreached,
       priority: ticket.priority || 'Medium',
       status: ticket.status || 'Open'
     }

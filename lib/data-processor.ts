@@ -78,13 +78,25 @@ export class DataProcessor {
     const today = new Date()
     
     this.tickets.forEach(ticket => {
+      let isCompliant = false
+      
       if (ticket.resolutionStatus === 'Within SLA') {
-        compliantCount++
-      } else if (ticket.resolutionStatus === '') {
-        const dueDate = new Date(ticket.dueByTime)
-        if (dueDate > today || ticket.status === 'Pending') {
-          compliantCount++
+        isCompliant = true
+      } else if (ticket.resolutionStatus === 'SLA Violated') {
+        isCompliant = false
+      } else if (!ticket.resolutionStatus || ticket.resolutionStatus.trim() === '') {
+        // If resolution status is blank, check due date and status
+        if (ticket.status === 'Pending' || ticket.status === 'Pending - Close') {
+          isCompliant = true // Assume still within SLA
+        } else {
+          // Check if due date has been reached
+          const dueDate = new Date(ticket.dueByTime)
+          isCompliant = dueDate > today
         }
+      }
+      
+      if (isCompliant) {
+        compliantCount++
       }
     })
     
