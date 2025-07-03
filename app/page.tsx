@@ -720,6 +720,7 @@ export default function SupportDashboard() {
           onClose={() => setShowSLAModal(false)}
           tickets={tickets}
           compliancePercentage={metrics.slaCompliance}
+          selectedCompany={selectedCompany}
         />
       )}
     </div>

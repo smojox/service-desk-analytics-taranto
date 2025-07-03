@@ -13,6 +13,7 @@ interface SLAComplianceModalProps {
   onClose: () => void
   tickets: TicketData[]
   compliancePercentage: number
+  selectedCompany?: string
 }
 
 interface SLATicket {
@@ -36,11 +37,16 @@ interface AgentBreachSummary {
   breachPercentage: number
 }
 
-export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage }: SLAComplianceModalProps) {
+export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage, selectedCompany }: SLAComplianceModalProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   
+  // Filter tickets by selected company if specified
+  const filteredTickets = selectedCompany && selectedCompany !== 'all' 
+    ? tickets.filter(ticket => ticket.companyName === selectedCompany)
+    : tickets
+
   // Calculate SLA data for tickets
-  const slaTickets: SLATicket[] = tickets.map(ticket => {
+  const slaTickets: SLATicket[] = filteredTickets.map(ticket => {
     const created = new Date(ticket.createdTime)
     const resolved = ticket.resolvedTime ? new Date(ticket.resolvedTime) : null
     const slaHours = getSLAHours(ticket.priority)
@@ -141,16 +147,14 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
-              SLA Compliance Analysis
-            </span>
-            <DialogClose asChild>
-              <Button variant="ghost" size="sm">
-                <X className="h-4 w-4" />
-              </Button>
-            </DialogClose>
+          <DialogTitle className="flex items-center">
+            <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
+            SLA Compliance Analysis
+            {selectedCompany && selectedCompany !== 'all' && (
+              <span className="ml-2 text-sm font-normal text-gray-600">
+                - {selectedCompany}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
