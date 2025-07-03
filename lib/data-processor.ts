@@ -35,10 +35,12 @@ export interface ChartData {
 
 export class DataProcessor {
   private tickets: TicketData[] = []
+  private originalTickets: TicketData[] = []
   private slaOverrides: { [ticketId: string]: boolean } = {}
 
-  constructor(tickets: TicketData[], slaOverrides: { [ticketId: string]: boolean } = {}) {
+  constructor(tickets: TicketData[], slaOverrides: { [ticketId: string]: boolean } = {}, originalTickets?: TicketData[]) {
     this.tickets = tickets
+    this.originalTickets = originalTickets || tickets
     this.slaOverrides = slaOverrides
   }
 
@@ -152,8 +154,8 @@ export class DataProcessor {
     const resolvedByMonth = new Map<string, number>()
     const openTicketTypes = new Map<string, number>()
 
-    // Process all tickets for volume chart (ignore current filters for this chart)
-    this.tickets.forEach(ticket => {
+    // Process all original tickets for volume chart (ignore current filters for this chart)
+    this.originalTickets.forEach(ticket => {
       // Created tickets by month
       const createdDate = new Date(ticket.createdTime)
       if (!isNaN(createdDate.getTime()) && (createdDate >= oneYearAgo || useAllData)) {
@@ -216,7 +218,7 @@ export class DataProcessor {
   }
 
   private getEarliestTicketDate(): Date {
-    const dates = this.tickets
+    const dates = this.originalTickets
       .map(ticket => new Date(ticket.createdTime))
       .filter(date => !isNaN(date.getTime()))
     
@@ -225,7 +227,7 @@ export class DataProcessor {
 
   getUniqueSDMs(): string[] {
     const sdms = new Set<string>()
-    this.tickets.forEach(ticket => {
+    this.originalTickets.forEach(ticket => {
       if (ticket.sdm && ticket.sdm.trim() !== '') {
         sdms.add(ticket.sdm)
       }
@@ -235,7 +237,7 @@ export class DataProcessor {
 
   getUniqueCompanies(): string[] {
     const companies = new Set<string>()
-    this.tickets.forEach(ticket => {
+    this.originalTickets.forEach(ticket => {
       if (ticket.companyName && ticket.companyName.trim() !== '') {
         companies.add(ticket.companyName)
       }
@@ -273,7 +275,7 @@ export class DataProcessor {
       )
     }
 
-    return new DataProcessor(filteredTickets, this.slaOverrides)
+    return new DataProcessor(filteredTickets, this.slaOverrides, this.originalTickets)
   }
 
   getTickets(): TicketData[] {

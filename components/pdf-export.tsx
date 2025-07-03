@@ -523,9 +523,10 @@ export class ClientServiceReportGenerator {
     page.drawRectangle({ x: 400, y: legendY - 25, width: 20, height: 12, color: rgb(0.2, 0.8, 0.4) })
     page.drawText('Resolved Tickets', { x: 430, y: legendY - 19, size: 12, font: font, color: textColor })
     
-    // Summary statistics without decimals
+    // Summary statistics without decimals - moved to very right
+    const summaryX = width - 300 // Position at far right
     page.drawText('Summary Statistics:', {
-      x: 50, y: 200, size: 16, font: boldFont, color: tealColor,
+      x: summaryX, y: 200, size: 16, font: boldFont, color: tealColor,
     })
     
     const totalCreated = monthlyData.reduce((sum, d) => sum + d.created, 0)
@@ -534,16 +535,16 @@ export class ClientServiceReportGenerator {
     const avgMonthlyResolved = Math.round(totalResolved / monthlyData.length)
     
     page.drawText(`• Average monthly created: ${avgMonthlyCreated} tickets`, {
-      x: 50, y: 175, size: 12, font: font, color: textColor,
+      x: summaryX, y: 175, size: 12, font: font, color: textColor,
     })
     page.drawText(`• Average monthly resolved: ${avgMonthlyResolved} tickets`, {
-      x: 50, y: 155, size: 12, font: font, color: textColor,
+      x: summaryX, y: 155, size: 12, font: font, color: textColor,
     })
     page.drawText(`• Total tickets created: ${Math.round(totalCreated)}`, {
-      x: 50, y: 135, size: 12, font: font, color: textColor,
+      x: summaryX, y: 135, size: 12, font: font, color: textColor,
     })
     page.drawText(`• Total tickets resolved: ${Math.round(totalResolved)}`, {
-      x: 50, y: 115, size: 12, font: font, color: textColor,
+      x: summaryX, y: 115, size: 12, font: font, color: textColor,
     })
   }
 
@@ -657,19 +658,20 @@ export class ClientServiceReportGenerator {
       legendY -= 20
     })
     
-    // Summary at bottom
+    // Summary at bottom - moved to very right
+    const chartSummaryX = width - 300 // Position at far right
     page.drawText('Chart Summary:', {
-      x: 50, y: 180, size: 16, font: boldFont, color: tealColor,
+      x: chartSummaryX, y: 180, size: 16, font: boldFont, color: tealColor,
     })
     
     page.drawText(`• Total open tickets: ${totalOpenTickets}`, {
-      x: 50, y: 155, size: 12, font: font, color: textColor,
+      x: chartSummaryX, y: 155, size: 12, font: font, color: textColor,
     })
     page.drawText(`• Number of ticket types: ${chartData.openTicketTypeData.length}`, {
-      x: 50, y: 135, size: 12, font: font, color: textColor,
+      x: chartSummaryX, y: 135, size: 12, font: font, color: textColor,
     })
     page.drawText(`• Most common type: ${topTypes[0]?.type} (${topTypes[0]?.count} tickets)`, {
-      x: 50, y: 115, size: 12, font: font, color: textColor,
+      x: chartSummaryX, y: 115, size: 12, font: font, color: textColor,
     })
   }
 
