@@ -38,6 +38,7 @@ import { DataProcessor, DashboardMetrics, EscalatedTicket, RecentTicket, ChartDa
 import { CSVUpload } from "@/components/csv-upload"
 import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
+import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 
 
 const statusColors = {
@@ -57,12 +58,12 @@ export default function SupportDashboard() {
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null)
   const [selectedSDM, setSelectedSDM] = useState<string>("")
   const [selectedCompany, setSelectedCompany] = useState<string>("")
-  const dateFilterOptions = [
+  const [dateFilterOptions, setDateFilterOptions] = useState<Array<{value: string, label: string}>>([
     { value: 'all', label: 'All Time' },
     { value: 'last3months', label: 'Last 3 Months' },
     { value: 'last6months', label: 'Last 6 Months' },
     { value: 'lastyear', label: 'Last Year' }
-  ]
+  ])
   
   const [tickets, setTickets] = useState<TicketData[]>([])
   const [metrics, setMetrics] = useState<DashboardMetrics>({
@@ -84,6 +85,7 @@ export default function SupportDashboard() {
   const [loading, setLoading] = useState(false)
   const [hasData, setHasData] = useState(false)
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all')
+  const [showSLAModal, setShowSLAModal] = useState(false)
 
   // Don't load CSV data on mount - wait for user upload
 
@@ -100,6 +102,20 @@ export default function SupportDashboard() {
       updateCompanyOptions()
     }
   }, [selectedSDM, tickets])
+
+  // Update date filter options when tickets are loaded
+  useEffect(() => {
+    if (tickets.length > 0) {
+      const monthOptions = generateMonthOptions()
+      setDateFilterOptions([
+        { value: 'all', label: 'All Time' },
+        { value: 'last3months', label: 'Last 3 Months' },
+        { value: 'last6months', label: 'Last 6 Months' },
+        { value: 'lastyear', label: 'Last Year' },
+        ...monthOptions
+      ])
+    }
+  }, [tickets])
 
   const loadCSVData = async () => {
     try {
@@ -129,8 +145,45 @@ export default function SupportDashboard() {
     }
   }
 
+  const generateMonthOptions = () => {
+    if (tickets.length === 0) return []
+    
+    const months = new Set<string>()
+    tickets.forEach(ticket => {
+      const date = new Date(ticket.createdTime)
+      if (!isNaN(date.getTime())) {
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        months.add(monthKey)
+      }
+    })
+    
+    return Array.from(months)
+      .sort()
+      .reverse() // Most recent first
+      .map(monthKey => {
+        const [year, month] = monthKey.split('-')
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1)
+        return {
+          value: monthKey,
+          label: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        }
+      })
+  }
+
   const getDateFilterRange = (): { from?: string; to?: string } => {
     const now = new Date()
+    
+    // Handle specific month selection
+    if (selectedDateFilter.includes('-')) {
+      const [year, month] = selectedDateFilter.split('-')
+      const startOfMonth = new Date(parseInt(year), parseInt(month) - 1, 1)
+      const endOfMonth = new Date(parseInt(year), parseInt(month), 0) // Last day of month
+      return {
+        from: startOfMonth.toISOString().split('T')[0],
+        to: endOfMonth.toISOString().split('T')[0]
+      }
+    }
+    
     switch (selectedDateFilter) {
       case 'last3months':
         const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
@@ -147,8 +200,12 @@ export default function SupportDashboard() {
   }
 
   const updateCompanyOptions = () => {
+    // Always allow all companies to be visible
+    setFilteredCompanyOptions(companyOptions)
+    
+    // If specific SDM is selected, we can still filter companies in the data processing
+    // but keep the dropdown enabled for user selection
     if (!selectedSDM || selectedSDM === 'all') {
-      setFilteredCompanyOptions(companyOptions)
       return
     }
 
@@ -326,9 +383,9 @@ export default function SupportDashboard() {
               </Select>
 
               {/* Company Dropdown */}
-              <Select value={selectedCompany} onValueChange={setSelectedCompany} disabled={!selectedSDM || selectedSDM === 'all'}>
-                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white disabled:opacity-50">
-                  <SelectValue placeholder={!selectedSDM || selectedSDM === 'all' ? 'Select SDM first' : 'Select Company'} />
+              <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
+                  <SelectValue placeholder="Select Company" />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredCompanyOptions.map((option) => (
@@ -484,6 +541,7 @@ export default function SupportDashboard() {
               value={`${metrics.slaCompliance}%`} 
               icon={Target} 
               trend="up" 
+              onClick={() => setShowSLAModal(true)}
             />
           </div>
         )}
@@ -654,6 +712,16 @@ export default function SupportDashboard() {
           </div>
         )}
       </div>
+      
+      {/* SLA Compliance Modal */}
+      {showSLAModal && (
+        <SLAComplianceModal
+          isOpen={showSLAModal}
+          onClose={() => setShowSLAModal(false)}
+          tickets={tickets}
+          compliancePercentage={metrics.slaCompliance}
+        />
+      )}
     </div>
   )
 }
