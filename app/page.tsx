@@ -40,6 +40,7 @@ import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
+import { usePPTExport } from "@/components/ppt-export"
 
 
 const statusColors = {
@@ -56,6 +57,7 @@ const priorityColors = {
 }
 
 export default function SupportDashboard() {
+  const { exportToPPT } = usePPTExport()
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null)
   const [selectedSDM, setSelectedSDM] = useState<string>("")
   const [selectedCompany, setSelectedCompany] = useState<string>("")
@@ -262,6 +264,23 @@ export default function SupportDashboard() {
   // Handle SLA override changes from modal
   const handleSLAOverrideChange = (newOverrides: { [ticketId: string]: boolean }) => {
     setSlaOverrides(newOverrides)
+  }
+
+  // Handle PowerPoint export
+  const handlePPTExport = async () => {
+    try {
+      await exportToPPT({
+        tickets: getFilteredTickets(),
+        metrics,
+        chartData,
+        selectedSDM: selectedSDM === 'all' ? undefined : selectedSDM,
+        selectedCompany: selectedCompany === 'all' ? undefined : selectedCompany,
+        selectedDateFilter
+      })
+    } catch (error) {
+      console.error('Error generating PowerPoint:', error)
+      // You could show a toast notification here
+    }
   }
 
   const handleCSVUpload = (newTickets: TicketData[]) => {
@@ -479,6 +498,7 @@ export default function SupportDashboard() {
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/20"
                 title="Export to PowerPoint"
+                onClick={handlePPTExport}
               >
                 <FileText className="h-4 w-4" />
                 <span className="ml-1 text-xs">PPT</span>
