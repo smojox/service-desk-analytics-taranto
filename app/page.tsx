@@ -270,7 +270,8 @@ export default function SupportDashboard() {
   const handlePDFExport = async () => {
     try {
       await exportToPDF({
-        tickets: getFilteredTickets(),
+        tickets: getFilteredTickets(), // For metrics and other filtered data
+        allTickets: tickets, // For monthly chart - unfiltered by date
         metrics,
         chartData,
         selectedSDM: selectedSDM === 'all' ? undefined : selectedSDM,

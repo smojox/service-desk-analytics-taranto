@@ -6,6 +6,7 @@ import { DashboardMetrics, ChartData } from '@/lib/data-processor'
 
 interface PDFExportProps {
   tickets: TicketData[]
+  allTickets?: TicketData[] // For monthly chart - unfiltered by date
   metrics: DashboardMetrics
   chartData: ChartData
   selectedSDM?: string
@@ -23,7 +24,7 @@ export class ClientServiceReportGenerator {
   }
 
   async generateReport(data: PDFExportProps): Promise<void> {
-    const { metrics, tickets, chartData, selectedSDM, selectedCompany, selectedDateFilter } = data
+    const { metrics, tickets, allTickets, chartData, selectedSDM, selectedCompany, selectedDateFilter } = data
     
     try {
       // Load template PDF
@@ -44,7 +45,7 @@ export class ClientServiceReportGenerator {
         await this.createEscalatedTicketsPageWithTemplate(escalatedTickets)
       }
       
-      await this.createMonthlyChartsPageWithTemplate(chartData)
+      await this.createMonthlyChartsPageWithTemplate(chartData, allTickets || tickets, selectedCompany, selectedSDM)
       await this.createTicketTypesPieChartPageWithTemplate(chartData)
       await this.createQuestionsPageWithTemplate()
       await this.createFinalPageWithTemplate()
@@ -167,15 +168,13 @@ export class ClientServiceReportGenerator {
     
     const { height } = page.getSize()
     
-    // Add agenda items (adjust positions based on your template)
+    // Add agenda items (reflect actual page headings)
     const agendaItems = [
-      'Service Performance Overview',
+      'Key Performance Metrics',
       'SLA Compliance Analysis', 
-      'Ticket Volume & Trends',
-      'Escalation Metrics',
-      'Agent Performance Summary',
-      'Current Status & Issues',
-      'Recommendations & Actions',
+      'Escalated Tickets Analysis',
+      'Monthly Created vs Resolved Tickets',
+      'Open Tickets by Type',
       'Questions & Discussion'
     ]
     
@@ -418,7 +417,7 @@ export class ClientServiceReportGenerator {
     })
   }
 
-  private async createMonthlyChartsPageWithTemplate(chartData: ChartData): Promise<void> {
+  private async createMonthlyChartsPageWithTemplate(chartData: ChartData, allTickets: TicketData[], selectedCompany?: string, selectedSDM?: string): Promise<void> {
     // Dedicated page for Monthly Created vs Resolved chart
     const page = await this.copyTemplatePageWithOverlay(2)
     const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
@@ -428,8 +427,9 @@ export class ClientServiceReportGenerator {
     const tealColor = rgb(0.06, 0.46, 0.43)
     const textColor = rgb(0.2, 0.2, 0.2)
     
-    // Page title
-    page.drawText('Monthly Created vs Resolved Tickets', {
+    // Page title with company context
+    const titleSuffix = selectedCompany && selectedCompany !== 'all' ? ` - ${selectedCompany}` : ''
+    page.drawText(`Monthly Created vs Resolved Tickets${titleSuffix}`, {
       x: 50,
       y: height - 60,
       size: 20,
@@ -441,6 +441,19 @@ export class ClientServiceReportGenerator {
     page.drawText('Ticket Volume Trends Over Time', {
       x: 50, y: height - 90, size: 14, font: font, color: textColor,
     })
+    
+    // Generate company-specific monthly data
+    const filteredTickets = allTickets.filter(ticket => {
+      if (selectedCompany && selectedCompany !== 'all' && ticket.companyName !== selectedCompany) {
+        return false
+      }
+      if (selectedSDM && selectedSDM !== 'all' && ticket.sdm !== selectedSDM) {
+        return false
+      }
+      return true
+    })
+    
+    const companyMonthlyData = this.generateMonthlyData(filteredTickets)
     
     // Draw chart with more space and better scaling
     const chartStartX = 80
@@ -464,7 +477,7 @@ export class ClientServiceReportGenerator {
       color: rgb(0.5, 0.5, 0.5),
     })
     
-    const monthlyData = chartData.ticketVolumeData.slice(-8) // Last 8 months
+    const monthlyData = companyMonthlyData.slice(-8) // Last 8 months
     const maxTickets = Math.max(...monthlyData.map(d => Math.max(d.created, d.resolved)), 10)
     
     // Y-axis labels
@@ -516,15 +529,16 @@ export class ClientServiceReportGenerator {
       })
     })
     
-    // Enhanced legend
-    const legendY = height - 120
-    page.drawRectangle({ x: 400, y: legendY, width: 20, height: 12, color: rgb(0.2, 0.6, 1) })
-    page.drawText('Created Tickets', { x: 430, y: legendY + 6, size: 12, font: font, color: textColor })
-    page.drawRectangle({ x: 400, y: legendY - 25, width: 20, height: 12, color: rgb(0.2, 0.8, 0.4) })
-    page.drawText('Resolved Tickets', { x: 430, y: legendY - 19, size: 12, font: font, color: textColor })
+    // Summary statistics without decimals - moved 1.5cm more to the right
+    const summaryX = width - 258 // Move 1.5cm right from previous position (300 - 42 = 258)
     
-    // Summary statistics without decimals - moved to very right
-    const summaryX = width - 300 // Position at far right
+    // Enhanced legend - aligned with Summary text
+    const legendY = height - 120
+    const legendX = summaryX // Align with Summary Statistics
+    page.drawRectangle({ x: legendX, y: legendY, width: 20, height: 12, color: rgb(0.2, 0.6, 1) })
+    page.drawText('Created Tickets', { x: legendX + 30, y: legendY + 6, size: 12, font: font, color: textColor })
+    page.drawRectangle({ x: legendX, y: legendY - 25, width: 20, height: 12, color: rgb(0.2, 0.8, 0.4) })
+    page.drawText('Resolved Tickets', { x: legendX + 30, y: legendY - 19, size: 12, font: font, color: textColor })
     page.drawText('Summary Statistics:', {
       x: summaryX, y: 200, size: 16, font: boldFont, color: tealColor,
     })
@@ -546,6 +560,50 @@ export class ClientServiceReportGenerator {
     page.drawText(`• Total tickets resolved: ${Math.round(totalResolved)}`, {
       x: summaryX, y: 115, size: 12, font: font, color: textColor,
     })
+  }
+
+  private generateMonthlyData(tickets: TicketData[]): Array<{ month: string; created: number; resolved: number }> {
+    const createdByMonth = new Map<string, number>()
+    const resolvedByMonth = new Map<string, number>()
+    
+    // Process tickets for monthly data
+    tickets.forEach(ticket => {
+      // Created tickets by month
+      const createdDate = new Date(ticket.createdTime)
+      if (!isNaN(createdDate.getTime())) {
+        const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`
+        createdByMonth.set(monthKey, (createdByMonth.get(monthKey) || 0) + 1)
+      }
+
+      // Resolved tickets by month
+      if (ticket.resolvedTime && ticket.resolvedTime.trim() !== '') {
+        const resolvedDate = new Date(ticket.resolvedTime)
+        if (!isNaN(resolvedDate.getTime())) {
+          const monthKey = `${resolvedDate.getFullYear()}-${String(resolvedDate.getMonth() + 1).padStart(2, '0')}`
+          resolvedByMonth.set(monthKey, (resolvedByMonth.get(monthKey) || 0) + 1)
+        }
+      }
+    })
+
+    // Generate monthly data - always show at least 7 months
+    const allMonths = new Set([...createdByMonth.keys(), ...resolvedByMonth.keys()])
+    
+    // Ensure we have at least 7 months by filling backwards from current month
+    const currentDate = new Date()
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      allMonths.add(monthKey)
+    }
+    
+    return Array.from(allMonths)
+      .sort()
+      .slice(-7) // Always show last 7 months maximum
+      .map(month => ({
+        month,
+        created: createdByMonth.get(month) || 0,
+        resolved: resolvedByMonth.get(month) || 0
+      }))
   }
 
   private async createTicketTypesPieChartPageWithTemplate(chartData: ChartData): Promise<void> {
@@ -636,10 +694,14 @@ export class ClientServiceReportGenerator {
       currentAngle += sliceAngle
     })
     
-    // Legend with ticket counts
+    // Summary at bottom - moved to very right
+    const chartSummaryX = width - 300 // Position at far right
+    
+    // Legend with ticket counts - aligned with Chart Summary
     let legendY = height - 130
+    const legendX = chartSummaryX // Align with Chart Summary
     page.drawText('Legend:', {
-      x: 500, y: legendY + 20, size: 14, font: boldFont, color: tealColor,
+      x: legendX, y: legendY + 20, size: 14, font: boldFont, color: tealColor,
     })
     
     topTypes.forEach((type, index) => {
@@ -647,19 +709,16 @@ export class ClientServiceReportGenerator {
       const typeLabel = type.type.length > 25 ? type.type.substring(0, 25) + '...' : type.type
       
       page.drawRectangle({
-        x: 500, y: legendY - 5, width: 15, height: 10,
+        x: legendX, y: legendY - 5, width: 15, height: 10,
         color: colors[index % colors.length],
       })
       
       page.drawText(`${typeLabel}: ${type.count} (${percentage}%)`, {
-        x: 520, y: legendY, size: 9, font: font, color: textColor,
+        x: legendX + 20, y: legendY, size: 9, font: font, color: textColor,
       })
       
       legendY -= 20
     })
-    
-    // Summary at bottom - moved to very right
-    const chartSummaryX = width - 300 // Position at far right
     page.drawText('Chart Summary:', {
       x: chartSummaryX, y: 180, size: 16, font: boldFont, color: tealColor,
     })
