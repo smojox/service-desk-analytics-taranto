@@ -1,0 +1,35 @@
+Key Metrics Cards (Top row - 5 cards):
+
+  1. Total Tickets: Count of all records (5,013)
+  2. Open Tickets: Count where Status ≠ "Resolved" or "Closed"
+  3. Closed Tickets: Count where Status = "Resolved or "Closed"
+  4. Avg Resolution: Average of Resolution time (in hrs) for closed tickets
+  5. SLA Compliance: % where Resolution status = "Within SLA". If this is blank then use the following logic to determine whether within SLA. If the due date is greater than today's date then its within SLA. If its prior to today then its breached unless the ticket is on "Pending" Status.
+
+  Filter Bar Dropdowns:
+
+  - SDM Dropdown: Unique values from SDM column (Thomas Wadsworth, John Lloyd, etc.)
+  - Company Dropdown: Unique values from Company Name column (London Borough of Brent, Sheffield City Council, etc.)
+  - Date Range: Filter by Created time column
+
+  Chart Visualizations:
+
+  1. Ticket Volume Chart: Time series of ticket count by Created time
+  2. Ticket Type Breakdown: Pie chart of Type column (Alert, Incident, Service Request, etc.)
+
+  Escalated Tickets Section:
+
+  - Filter where SDM Escalation = true
+  - Group by severity: Critical (Urgent), High, Medium
+  - Display recent escalations with Ticket ID, Priority, Summary, Company, Creation Date, Status
+
+  Recent Priority Tickets:
+
+  - Sort by Created time (most recent first)
+  - Filter by Priority = "Urgent", "High"
+  - Show ticket details from Ticket ID, Priority, Summary, Company, Creation Date, Status
+
+  Filtering Conditions:
+
+  - Status-based filtering: Open (Status ≠ "Resolved "or "Closed"), Closed (Status = "Resolved" or "Closed")
+  - Priority-based grouping: Critical/Urgent, High, Medium, Low
