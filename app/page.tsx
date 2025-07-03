@@ -235,27 +235,29 @@ export default function SupportDashboard() {
     trend?: "up" | "down"
     onClick?: () => void
     children?: React.ReactNode
-  }) => (
-    <Card
-      className="cursor-pointer hover:shadow-lg transition-all duration-200 border-0 bg-white/80 backdrop-blur-sm"
-      onClick={onClick}
-    >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-teal-600" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
-        {change && (
-          <p className={`text-xs ${trend === "up" ? "text-green-600" : "text-red-600"} flex items-center mt-1`}>
-            <TrendingUp className="h-3 w-3 mr-1" />
-            {change}
-          </p>
-        )}
-        {children}
-      </CardContent>
-    </Card>
-  )
+  }) => {
+    return (
+      <Card
+        className="cursor-pointer hover:shadow-lg transition-all duration-200 border-0 bg-white/80 backdrop-blur-sm"
+        onClick={onClick}
+      >
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-gray-600">{title}</CardTitle>
+          <Icon className="h-4 w-4 text-teal-600" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-gray-900">{value}</div>
+          {change && (
+            <p className={`text-xs ${trend === "up" ? "text-green-600" : "text-red-600"} flex items-center mt-1`}>
+              <TrendingUp className="h-3 w-3 mr-1" />
+              {change}
+            </p>
+          )}
+          {children}
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-400 via-cyan-500 to-green-400">
@@ -424,7 +426,8 @@ export default function SupportDashboard() {
 
         {/* Dashboard Content - only show when data is loaded */}
         {hasData && (
-        {/* Key Metrics */}
+          <div>
+            {/* Key Metrics */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
             {[...Array(5)].map((_, i) => (
@@ -648,6 +651,7 @@ export default function SupportDashboard() {
             </CardContent>
           </Card>
         </div>
+          </div>
         )}
       </div>
       
