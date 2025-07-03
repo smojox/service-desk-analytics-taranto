@@ -126,6 +126,8 @@ export class DataProcessor {
     // Get monthly data for last year or all data if less than a year
     const now = new Date()
     const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1)
+    const earliestDate = this.getEarliestTicketDate()
+    const useAllData = earliestDate > oneYearAgo
     
     const createdByMonth = new Map<string, number>()
     const resolvedByMonth = new Map<string, number>()
@@ -135,7 +137,7 @@ export class DataProcessor {
     this.tickets.forEach(ticket => {
       // Created tickets by month
       const createdDate = new Date(ticket.createdTime)
-      if (createdDate >= oneYearAgo || this.getEarliestTicketDate() > oneYearAgo) {
+      if (!isNaN(createdDate.getTime()) && (createdDate >= oneYearAgo || useAllData)) {
         const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`
         createdByMonth.set(monthKey, (createdByMonth.get(monthKey) || 0) + 1)
       }
@@ -143,7 +145,7 @@ export class DataProcessor {
       // Resolved tickets by month
       if (ticket.resolvedTime && ticket.resolvedTime.trim() !== '') {
         const resolvedDate = new Date(ticket.resolvedTime)
-        if (resolvedDate >= oneYearAgo || this.getEarliestTicketDate() > oneYearAgo) {
+        if (!isNaN(resolvedDate.getTime()) && (resolvedDate >= oneYearAgo || useAllData)) {
           const monthKey = `${resolvedDate.getFullYear()}-${String(resolvedDate.getMonth() + 1).padStart(2, '0')}`
           resolvedByMonth.set(monthKey, (resolvedByMonth.get(monthKey) || 0) + 1)
         }

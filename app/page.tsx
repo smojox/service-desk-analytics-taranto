@@ -23,7 +23,6 @@ import {
   Upload,
   BarChart3,
   PieChart,
-  X,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -75,13 +74,12 @@ export default function SupportDashboard() {
   const [recentTickets, setRecentTickets] = useState<RecentTicket[]>([])
   const [chartData, setChartData] = useState<ChartData>({
     ticketVolumeData: [],
-    ticketTypeData: []
+    openTicketTypeData: []
   })
   const [sdmOptions, setSdmOptions] = useState<Array<{value: string, label: string}>>([])
   const [companyOptions, setCompanyOptions] = useState<Array<{value: string, label: string}>>([])
   const [filteredCompanyOptions, setFilteredCompanyOptions] = useState<Array<{value: string, label: string}>>([])
   const [loading, setLoading] = useState(false)
-  const [showUpload, setShowUpload] = useState(false)
   const [hasData, setHasData] = useState(false)
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all')
 
@@ -129,20 +127,20 @@ export default function SupportDashboard() {
     }
   }
 
-  const getDateFilterRange = () => {
+  const getDateFilterRange = (): { from?: string; to?: string } => {
     const now = new Date()
     switch (selectedDateFilter) {
       case 'last3months':
         const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
-        return { from: threeMonthsAgo.toISOString().split('T')[0] }
+        return { from: threeMonthsAgo.toISOString().split('T')[0], to: undefined }
       case 'last6months':
         const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1)
-        return { from: sixMonthsAgo.toISOString().split('T')[0] }
+        return { from: sixMonthsAgo.toISOString().split('T')[0], to: undefined }
       case 'lastyear':
         const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1)
-        return { from: oneYearAgo.toISOString().split('T')[0] }
+        return { from: oneYearAgo.toISOString().split('T')[0], to: undefined }
       default:
-        return {}
+        return { from: undefined, to: undefined }
     }
   }
 
@@ -178,7 +176,7 @@ export default function SupportDashboard() {
       sdm: selectedSDM || undefined,
       company: selectedCompany || undefined,
       dateFrom: dateFilter.from,
-      dateTo: dateFilter.to
+      dateTo: dateFilter.to || undefined
     })
     
     setMetrics(filteredProcessor.calculateMetrics())
@@ -188,35 +186,48 @@ export default function SupportDashboard() {
   }
 
   const handleCSVUpload = (newTickets: TicketData[]) => {
-    setTickets(newTickets)
-    
-    const processor = new DataProcessor(newTickets)
-    const uniqueSDMs = processor.getUniqueSDMs()
-    const uniqueCompanies = processor.getUniqueCompanies()
-    
-    setSdmOptions([
-      { value: 'all', label: 'All SDMs' },
-      ...uniqueSDMs.map(sdm => ({ value: sdm, label: sdm }))
-    ])
-    
-    setCompanyOptions([
-      { value: 'all', label: 'All Companies' },
-      ...uniqueCompanies.map(company => ({ value: company, label: company }))
-    ])
-    
-    setFilteredCompanyOptions([
-      { value: 'all', label: 'All Companies' },
-      ...uniqueCompanies.map(company => ({ value: company, label: company }))
-    ])
-    
-    setShowUpload(false)
-    setLoading(false)
-    setHasData(true)
-    
-    // Reset filters
-    setSelectedSDM('all')
-    setSelectedCompany('all')
-    setSelectedDateFilter('all')
+    try {
+      console.log('Processing CSV upload...', { ticketCount: newTickets.length })
+      
+      setTickets(newTickets)
+      
+      const processor = new DataProcessor(newTickets)
+      console.log('DataProcessor created successfully')
+      
+      const uniqueSDMs = processor.getUniqueSDMs()
+      const uniqueCompanies = processor.getUniqueCompanies()
+      console.log('Unique data extracted:', { sdmCount: uniqueSDMs.length, companyCount: uniqueCompanies.length })
+      
+      setSdmOptions([
+        { value: 'all', label: 'All SDMs' },
+        ...uniqueSDMs.map(sdm => ({ value: sdm, label: sdm }))
+      ])
+      
+      setCompanyOptions([
+        { value: 'all', label: 'All Companies' },
+        ...uniqueCompanies.map(company => ({ value: company, label: company }))
+      ])
+      
+      setFilteredCompanyOptions([
+        { value: 'all', label: 'All Companies' },
+        ...uniqueCompanies.map(company => ({ value: company, label: company }))
+      ])
+      
+      // Reset filters
+      setSelectedSDM('all')
+      setSelectedCompany('all')
+      setSelectedDateFilter('all')
+      
+      // CSV uploaded successfully
+      setLoading(false)
+      setHasData(true)
+      
+      console.log('CSV upload completed successfully')
+    } catch (error) {
+      console.error('Error processing CSV upload:', error)
+      setLoading(false)
+      // You could show an error message to the user here
+    }
   }
 
   const MetricCard = ({
@@ -361,8 +372,14 @@ export default function SupportDashboard() {
                 variant="ghost"
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/20"
-                title="Upload CSV"
-                onClick={() => setShowUpload(true)}
+                title="Replace CSV Data"
+                onClick={() => {
+                  setHasData(false)
+                  setTickets([])
+                  setSelectedSDM('all')
+                  setSelectedCompany('all')
+                  setSelectedDateFilter('all')
+                }}
               >
                 <Upload className="h-4 w-4" />
                 <span className="ml-1 text-xs">CSV</span>
@@ -404,7 +421,7 @@ export default function SupportDashboard() {
         {/* Initial Upload State */}
         {!hasData && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-            <div className="bg-white/80 backdrop-blur-sm rounded-lg p-12 max-w-md">
+            <div className="bg-white/80 backdrop-blur-sm rounded-lg p-12 max-w-lg">
               <Upload className="mx-auto h-16 w-16 text-teal-600 mb-6" />
               <h2 className="text-2xl font-bold text-gray-900 mb-4">
                 Welcome to Service Desk Analytics
@@ -412,14 +429,7 @@ export default function SupportDashboard() {
               <p className="text-gray-600 mb-6">
                 Upload your CSV file to start analyzing your service desk data and gain insights into ticket trends, SLA compliance, and team performance.
               </p>
-              <Button
-                onClick={() => setShowUpload(true)}
-                size="lg"
-                className="bg-teal-600 hover:bg-teal-700"
-              >
-                <Upload className="mr-2 h-5 w-5" />
-                Upload CSV Data
-              </Button>
+              <CSVUpload onDataUpload={handleCSVUpload} className="mt-4" />
             </div>
           </div>
         )}
@@ -493,7 +503,7 @@ export default function SupportDashboard() {
               ) : (
                 <div className="h-64 flex items-center justify-center text-gray-500">
                   <BarChart3 className="h-8 w-8 mr-2" />
-                  {chartData.ticketVolumeData.length > 0 ? 
+                  {chartData?.ticketVolumeData?.length > 0 ? 
                     `Monthly Created vs Resolved Tickets (${chartData.ticketVolumeData.length} months)` : 
                     'Monthly ticket volume chart'
                   }
@@ -514,7 +524,7 @@ export default function SupportDashboard() {
               ) : (
                 <div className="h-64 flex items-center justify-center text-gray-500">
                   <PieChart className="h-8 w-8 mr-2" />
-                  {chartData.openTicketTypeData.length > 0 ? 
+                  {chartData?.openTicketTypeData?.length > 0 ? 
                     `Open Tickets by Type (${chartData.openTicketTypeData.length} types)` : 
                     'Open tickets type breakdown'
                   }
@@ -533,7 +543,7 @@ export default function SupportDashboard() {
                 Escalated Tickets
               </CardTitle>
               <Badge className="bg-red-100 text-red-800">
-                {loading ? '...' : `${escalatedTickets.length} Escalated`}
+                {loading ? '...' : `${escalatedTickets?.length || 0} Escalated`}
               </Badge>
             </div>
           </CardHeader>
@@ -554,7 +564,7 @@ export default function SupportDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {escalatedTickets.length === 0 ? (
+                {!escalatedTickets || escalatedTickets.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">No escalated tickets found</p>
                 ) : (
                   escalatedTickets.slice(0, 5).map((ticket) => {
@@ -618,7 +628,7 @@ export default function SupportDashboard() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {recentTickets.length === 0 ? (
+                  {!recentTickets || recentTickets.length === 0 ? (
                     <p className="text-gray-500 text-center py-8">No high priority tickets found</p>
                   ) : (
                     recentTickets.map((ticket) => {
@@ -654,25 +664,6 @@ export default function SupportDashboard() {
           </div>
         )}
       </div>
-      
-      {/* CSV Upload Modal */}
-      {showUpload && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Upload CSV Data</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowUpload(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <CSVUpload onDataUpload={handleCSVUpload} />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
