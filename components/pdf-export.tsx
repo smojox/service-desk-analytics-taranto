@@ -44,7 +44,8 @@ export class ClientServiceReportGenerator {
         await this.createEscalatedTicketsPageWithTemplate(escalatedTickets)
       }
       
-      await this.createChartsPageWithTemplate(chartData)
+      await this.createMonthlyChartsPageWithTemplate(chartData)
+      await this.createTicketTypesPieChartPageWithTemplate(chartData)
       await this.createQuestionsPageWithTemplate()
       await this.createFinalPageWithTemplate()
       
@@ -417,8 +418,8 @@ export class ClientServiceReportGenerator {
     })
   }
 
-  private async createChartsPageWithTemplate(chartData: ChartData): Promise<void> {
-    // Use Page 3 (blank canvas) for comprehensive charts
+  private async createMonthlyChartsPageWithTemplate(chartData: ChartData): Promise<void> {
+    // Dedicated page for Monthly Created vs Resolved chart
     const page = await this.copyTemplatePageWithOverlay(2)
     const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
     const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
@@ -428,7 +429,7 @@ export class ClientServiceReportGenerator {
     const textColor = rgb(0.2, 0.2, 0.2)
     
     // Page title
-    page.drawText('Analytics Charts & Performance Trends', {
+    page.drawText('Monthly Created vs Resolved Tickets', {
       x: 50,
       y: height - 60,
       size: 20,
@@ -436,136 +437,239 @@ export class ClientServiceReportGenerator {
       color: tealColor,
     })
     
-    // Chart 1: Monthly Created vs Resolved Tickets (Enhanced bar chart)
-    page.drawText('Monthly Created vs Resolved Tickets', {
-      x: 50, y: height - 120, size: 16, font: boldFont, color: tealColor,
+    // Chart subtitle
+    page.drawText('Ticket Volume Trends Over Time', {
+      x: 50, y: height - 90, size: 14, font: font, color: textColor,
     })
     
-    // Draw chart axes
-    const chartStartX = 70
-    const chartStartY = height - 350
-    const chartWidth = 350
-    const chartHeight = 180
+    // Draw chart with more space and better scaling
+    const chartStartX = 80
+    const chartStartY = height - 450
+    const chartWidth = 600
+    const chartHeight = 250
     
     // Y-axis
     page.drawLine({
       start: { x: chartStartX, y: chartStartY },
       end: { x: chartStartX, y: chartStartY + chartHeight },
-      thickness: 1,
-      color: rgb(0.7, 0.7, 0.7),
+      thickness: 2,
+      color: rgb(0.5, 0.5, 0.5),
     })
     
     // X-axis
     page.drawLine({
       start: { x: chartStartX, y: chartStartY },
       end: { x: chartStartX + chartWidth, y: chartStartY },
-      thickness: 1,
-      color: rgb(0.7, 0.7, 0.7),
+      thickness: 2,
+      color: rgb(0.5, 0.5, 0.5),
     })
     
     const monthlyData = chartData.ticketVolumeData.slice(-8) // Last 8 months
     const maxTickets = Math.max(...monthlyData.map(d => Math.max(d.created, d.resolved)), 10)
     
+    // Y-axis labels
+    for (let i = 0; i <= 5; i++) {
+      const value = Math.round((maxTickets / 5) * i)
+      const y = chartStartY + (chartHeight / 5) * i
+      page.drawText(`${value}`, {
+        x: chartStartX - 25, y: y - 3, size: 8, font: font, color: textColor,
+      })
+      
+      // Grid lines
+      page.drawLine({
+        start: { x: chartStartX, y: y },
+        end: { x: chartStartX + chartWidth, y: y },
+        thickness: 0.5,
+        color: rgb(0.9, 0.9, 0.9),
+      })
+    }
+    
     monthlyData.forEach((data, index) => {
-      const x = chartStartX + 20 + (index * 40)
-      const createdHeight = (data.created / maxTickets) * chartHeight * 0.8
-      const resolvedHeight = (data.resolved / maxTickets) * chartHeight * 0.8
+      const x = chartStartX + 40 + (index * (chartWidth - 80) / (monthlyData.length - 1))
+      const createdHeight = (data.created / maxTickets) * chartHeight
+      const resolvedHeight = (data.resolved / maxTickets) * chartHeight
       
       // Created tickets bar (blue)
       page.drawRectangle({
-        x: x - 8, y: chartStartY, width: 12, height: createdHeight,
+        x: x - 12, y: chartStartY, width: 18, height: createdHeight,
         color: rgb(0.2, 0.6, 1),
       })
       
-      // Resolved tickets bar (green)
+      // Resolved tickets bar (green) 
       page.drawRectangle({
-        x: x + 6, y: chartStartY, width: 12, height: resolvedHeight,
+        x: x + 8, y: chartStartY, width: 18, height: resolvedHeight,
         color: rgb(0.2, 0.8, 0.4),
       })
       
       // Month label
-      const monthLabel = data.month.length > 6 ? data.month.substring(0, 6) : data.month
+      const monthLabel = data.month.length > 8 ? data.month.substring(0, 8) : data.month
       page.drawText(monthLabel, {
-        x: x - 15, y: chartStartY - 15, size: 7, font: font, color: textColor,
+        x: x - 20, y: chartStartY - 20, size: 9, font: font, color: textColor,
       })
       
-      // Values above bars
-      page.drawText(`${data.created}`, {
-        x: x - 8, y: chartStartY + createdHeight + 5, size: 6, font: font, color: rgb(0.2, 0.6, 1),
+      // Values above bars (no decimals)
+      page.drawText(`${Math.round(data.created)}`, {
+        x: x - 12, y: chartStartY + createdHeight + 8, size: 8, font: font, color: rgb(0.2, 0.6, 1),
       })
-      page.drawText(`${data.resolved}`, {
-        x: x + 6, y: chartStartY + resolvedHeight + 5, size: 6, font: font, color: rgb(0.2, 0.8, 0.4),
+      page.drawText(`${Math.round(data.resolved)}`, {
+        x: x + 8, y: chartStartY + resolvedHeight + 8, size: 8, font: font, color: rgb(0.2, 0.8, 0.4),
       })
     })
     
-    // Chart legend
-    page.drawRectangle({ x: 480, y: height - 150, width: 12, height: 8, color: rgb(0.2, 0.6, 1) })
-    page.drawText('Created', { x: 500, y: height - 145, size: 10, font: font, color: textColor })
-    page.drawRectangle({ x: 480, y: height - 170, width: 12, height: 8, color: rgb(0.2, 0.8, 0.4) })
-    page.drawText('Resolved', { x: 500, y: height - 165, size: 10, font: font, color: textColor })
+    // Enhanced legend
+    const legendY = height - 120
+    page.drawRectangle({ x: 400, y: legendY, width: 20, height: 12, color: rgb(0.2, 0.6, 1) })
+    page.drawText('Created Tickets', { x: 430, y: legendY + 6, size: 12, font: font, color: textColor })
+    page.drawRectangle({ x: 400, y: legendY - 25, width: 20, height: 12, color: rgb(0.2, 0.8, 0.4) })
+    page.drawText('Resolved Tickets', { x: 430, y: legendY - 19, size: 12, font: font, color: textColor })
     
-    // Chart 2: Open Tickets by Type (Enhanced pie chart representation)
+    // Summary statistics without decimals
+    page.drawText('Summary Statistics:', {
+      x: 50, y: 200, size: 16, font: boldFont, color: tealColor,
+    })
+    
+    const totalCreated = monthlyData.reduce((sum, d) => sum + d.created, 0)
+    const totalResolved = monthlyData.reduce((sum, d) => sum + d.resolved, 0)
+    const avgMonthlyCreated = Math.round(totalCreated / monthlyData.length)
+    const avgMonthlyResolved = Math.round(totalResolved / monthlyData.length)
+    
+    page.drawText(`• Average monthly created: ${avgMonthlyCreated} tickets`, {
+      x: 50, y: 175, size: 12, font: font, color: textColor,
+    })
+    page.drawText(`• Average monthly resolved: ${avgMonthlyResolved} tickets`, {
+      x: 50, y: 155, size: 12, font: font, color: textColor,
+    })
+    page.drawText(`• Total tickets created: ${Math.round(totalCreated)}`, {
+      x: 50, y: 135, size: 12, font: font, color: textColor,
+    })
+    page.drawText(`• Total tickets resolved: ${Math.round(totalResolved)}`, {
+      x: 50, y: 115, size: 12, font: font, color: textColor,
+    })
+  }
+
+  private async createTicketTypesPieChartPageWithTemplate(chartData: ChartData): Promise<void> {
+    // Dedicated page for Ticket Types pie chart
+    const page = await this.copyTemplatePageWithOverlay(2)
+    const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+    const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
+    
+    const { width, height } = page.getSize()
+    const tealColor = rgb(0.06, 0.46, 0.43)
+    const textColor = rgb(0.2, 0.2, 0.2)
+    
+    // Page title
     page.drawText('Open Tickets by Type', {
-      x: 480, y: height - 200, size: 16, font: boldFont, color: tealColor,
+      x: 50,
+      y: height - 60,
+      size: 20,
+      font: boldFont,
+      color: tealColor,
     })
     
-    const topTypes = chartData.openTicketTypeData.slice(0, 10)
+    page.drawText('Distribution of Open Ticket Categories', {
+      x: 50, y: height - 90, size: 14, font: font, color: textColor,
+    })
+    
+    const topTypes = chartData.openTicketTypeData.slice(0, 12)
     const totalOpenTickets = topTypes.reduce((sum, type) => sum + type.count, 0)
     
-    // Draw pie chart as stacked rectangles with better proportions
-    const pieStartX = 480
-    const pieStartY = height - 240
-    const pieWidth = 200
-    let currentY = pieStartY
+    // Draw actual pie chart
+    const centerX = 300
+    const centerY = height - 280
+    const radius = 120
     
     const colors = [
       rgb(0.2, 0.6, 1), rgb(0.8, 0.4, 0.2), rgb(0.2, 0.8, 0.4), 
       rgb(0.8, 0.2, 0.8), rgb(1, 0.6, 0.2), rgb(0.4, 0.2, 0.8),
       rgb(0.6, 0.8, 0.2), rgb(0.8, 0.2, 0.4), rgb(0.5, 0.5, 0.5),
-      rgb(0.9, 0.5, 0.7)
+      rgb(0.9, 0.5, 0.7), rgb(0.3, 0.7, 0.8), rgb(0.7, 0.3, 0.5)
     ]
     
+    let currentAngle = 0
+    
     topTypes.forEach((type, index) => {
-      const percentage = ((type.count / totalOpenTickets) * 100).toFixed(1)
-      const barHeight = Math.max((type.count / totalOpenTickets) * 150, 8)
+      const percentage = (type.count / totalOpenTickets) * 100
+      const sliceAngle = (percentage / 100) * 2 * Math.PI
       
-      // Type bar
+      // Draw pie slice (simplified as polygon)
+      const points = []
+      points.push({ x: centerX, y: centerY }) // Center point
+      
+      for (let a = currentAngle; a <= currentAngle + sliceAngle; a += 0.1) {
+        points.push({
+          x: centerX + radius * Math.cos(a),
+          y: centerY + radius * Math.sin(a)
+        })
+      }
+      
+      // Draw slice as series of triangles from center
+      for (let i = 1; i < points.length - 1; i++) {
+        const triangle = [points[0], points[i], points[i + 1]]
+        // Draw filled triangle (approximated with small rectangles)
+        for (let step = 0; step <= 1; step += 0.1) {
+          const x1 = triangle[0].x + step * (triangle[1].x - triangle[0].x)
+          const y1 = triangle[0].y + step * (triangle[1].y - triangle[0].y)
+          const x2 = triangle[0].x + step * (triangle[2].x - triangle[0].x)
+          const y2 = triangle[0].y + step * (triangle[2].y - triangle[0].y)
+          
+          page.drawLine({
+            start: { x: x1, y: y1 },
+            end: { x: x2, y: y2 },
+            thickness: 2,
+            color: colors[index % colors.length],
+          })
+        }
+      }
+      
+      // Label outside the pie
+      const labelAngle = currentAngle + sliceAngle / 2
+      const labelX = centerX + (radius + 40) * Math.cos(labelAngle)
+      const labelY = centerY + (radius + 40) * Math.sin(labelAngle)
+      
+      if (percentage > 3) { // Only show labels for significant slices
+        page.drawText(`${Math.round(percentage)}%`, {
+          x: labelX - 10, y: labelY, size: 8, font: font, color: textColor,
+        })
+      }
+      
+      currentAngle += sliceAngle
+    })
+    
+    // Legend with ticket counts
+    let legendY = height - 130
+    page.drawText('Legend:', {
+      x: 500, y: legendY + 20, size: 14, font: boldFont, color: tealColor,
+    })
+    
+    topTypes.forEach((type, index) => {
+      const percentage = Math.round((type.count / totalOpenTickets) * 100)
+      const typeLabel = type.type.length > 25 ? type.type.substring(0, 25) + '...' : type.type
+      
       page.drawRectangle({
-        x: pieStartX, y: currentY, width: pieWidth * 0.6, height: barHeight,
+        x: 500, y: legendY - 5, width: 15, height: 10,
         color: colors[index % colors.length],
       })
       
-      // Type label and count
-      const typeLabel = type.type.length > 25 ? type.type.substring(0, 25) + '...' : type.type
       page.drawText(`${typeLabel}: ${type.count} (${percentage}%)`, {
-        x: pieStartX + pieWidth * 0.65, y: currentY + barHeight/2, 
-        size: 8, font: font, color: textColor,
+        x: 520, y: legendY, size: 9, font: font, color: textColor,
       })
       
-      currentY += barHeight + 2
+      legendY -= 20
     })
     
-    // Summary statistics
+    // Summary at bottom
     page.drawText('Chart Summary:', {
-      x: 50, y: 180, size: 14, font: boldFont, color: tealColor,
+      x: 50, y: 180, size: 16, font: boldFont, color: tealColor,
     })
     
-    const totalCreated = monthlyData.reduce((sum, d) => sum + d.created, 0)
-    const totalResolved = monthlyData.reduce((sum, d) => sum + d.resolved, 0)
-    const avgMonthlyCreated = (totalCreated / monthlyData.length).toFixed(1)
-    const avgMonthlyResolved = (totalResolved / monthlyData.length).toFixed(1)
-    
-    page.drawText(`• Average monthly created: ${avgMonthlyCreated} tickets`, {
-      x: 50, y: 160, size: 10, font: font, color: textColor,
+    page.drawText(`• Total open tickets: ${totalOpenTickets}`, {
+      x: 50, y: 155, size: 12, font: font, color: textColor,
     })
-    page.drawText(`• Average monthly resolved: ${avgMonthlyResolved} tickets`, {
-      x: 50, y: 145, size: 10, font: font, color: textColor,
-    })
-    page.drawText(`• Total open ticket types: ${chartData.openTicketTypeData.length}`, {
-      x: 50, y: 130, size: 10, font: font, color: textColor,
+    page.drawText(`• Number of ticket types: ${chartData.openTicketTypeData.length}`, {
+      x: 50, y: 135, size: 12, font: font, color: textColor,
     })
     page.drawText(`• Most common type: ${topTypes[0]?.type} (${topTypes[0]?.count} tickets)`, {
-      x: 50, y: 115, size: 10, font: font, color: textColor,
+      x: 50, y: 115, size: 12, font: font, color: textColor,
     })
   }
 
@@ -587,12 +691,12 @@ export class ClientServiceReportGenerator {
     const tealColor = rgb(0.06, 0.46, 0.43) // Teal color matching dashboard
     const textColor = rgb(0.2, 0.2, 0.2)
     
-    // Section positions (adjust based on your template layout)
+    // Section positions (moved up 1cm and improved alignment)
     const leftX = 60
-    const rightX = width / 2 + 30
-    const topY = height - 100
-    const middleY = height - 250
-    const bottomY = height - 400
+    const rightX = width / 2 + 40
+    const topY = height - 72  // Moved up 1cm (28 points)
+    const middleY = height - 222  // Moved up 1cm
+    const bottomY = height - 372  // Moved up 1cm
     
     // Top Left: Key Metrics
     page.drawText('Key Performance Metrics', {

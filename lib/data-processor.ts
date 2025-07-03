@@ -179,10 +179,26 @@ export class DataProcessor {
         openTicketTypes.set(type, (openTicketTypes.get(type) || 0) + 1)
       })
 
-    // Generate monthly data
+    // Generate monthly data - always show at least 7 months
     const allMonths = new Set([...createdByMonth.keys(), ...resolvedByMonth.keys()])
-    const ticketVolumeData = Array.from(allMonths)
+    
+    // If we have fewer than 7 months, generate the last 7 months
+    const monthsToShow = new Set<string>()
+    
+    // Add actual months with data
+    allMonths.forEach(month => monthsToShow.add(month))
+    
+    // Ensure we have at least 7 months by filling backwards from current month
+    const currentDate = new Date()
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      monthsToShow.add(monthKey)
+    }
+    
+    const ticketVolumeData = Array.from(monthsToShow)
       .sort()
+      .slice(-7) // Always show last 7 months maximum
       .map(month => ({
         month,
         created: createdByMonth.get(month) || 0,
