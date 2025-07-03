@@ -40,7 +40,7 @@ import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
-import { usePPTExport } from "@/components/ppt-export"
+import { usePDFExport } from "@/components/pdf-export"
 
 
 const statusColors = {
@@ -57,7 +57,7 @@ const priorityColors = {
 }
 
 export default function SupportDashboard() {
-  const { exportToPPT } = usePPTExport()
+  const { exportToPDF } = usePDFExport()
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null)
   const [selectedSDM, setSelectedSDM] = useState<string>("")
   const [selectedCompany, setSelectedCompany] = useState<string>("")
@@ -266,10 +266,10 @@ export default function SupportDashboard() {
     setSlaOverrides(newOverrides)
   }
 
-  // Handle PowerPoint export
-  const handlePPTExport = async () => {
+  // Handle PDF export
+  const handlePDFExport = async () => {
     try {
-      await exportToPPT({
+      await exportToPDF({
         tickets: getFilteredTickets(),
         metrics,
         chartData,
@@ -278,7 +278,7 @@ export default function SupportDashboard() {
         selectedDateFilter
       })
     } catch (error) {
-      console.error('Error generating PowerPoint:', error)
+      console.error('Error generating PDF:', error)
       // You could show a toast notification here
     }
   }
@@ -497,11 +497,11 @@ export default function SupportDashboard() {
                 variant="ghost"
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/20"
-                title="Export to PowerPoint"
-                onClick={handlePPTExport}
+                title="Export Service Review PDF"
+                onClick={handlePDFExport}
               >
                 <FileText className="h-4 w-4" />
-                <span className="ml-1 text-xs">PPT</span>
+                <span className="ml-1 text-xs">PDF</span>
               </Button>
               <Button
                 variant="ghost"
