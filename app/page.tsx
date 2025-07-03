@@ -39,6 +39,7 @@ import { CSVUpload } from "@/components/csv-upload"
 import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
+import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
 
 
 const statusColors = {
@@ -86,6 +87,7 @@ export default function SupportDashboard() {
   const [hasData, setHasData] = useState(false)
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all')
   const [showSLAModal, setShowSLAModal] = useState(false)
+  const [showAIModal, setShowAIModal] = useState(false)
 
   // Don't load CSV data on mount - wait for user upload
 
@@ -489,6 +491,7 @@ export default function SupportDashboard() {
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/20"
                 title="AI Insights"
+                onClick={() => setShowAIModal(true)}
               >
                 <Brain className="h-4 w-4" />
                 <span className="ml-1 text-xs">AI</span>
@@ -744,6 +747,19 @@ export default function SupportDashboard() {
           tickets={getFilteredTickets()}
           compliancePercentage={metrics.slaCompliance}
           selectedCompany={selectedCompany}
+        />
+      )}
+      
+      {/* AI Insights Modal */}
+      {showAIModal && (
+        <AIInsightsModal
+          isOpen={showAIModal}
+          onClose={() => setShowAIModal(false)}
+          tickets={getFilteredTickets()}
+          metrics={metrics}
+          selectedSDM={selectedSDM}
+          selectedCompany={selectedCompany}
+          selectedDateFilter={selectedDateFilter}
         />
       )}
     </div>
