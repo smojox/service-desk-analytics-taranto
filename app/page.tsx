@@ -244,6 +244,18 @@ export default function SupportDashboard() {
     setChartData(filteredProcessor.getChartData())
   }
 
+  // Get filtered tickets for the modal
+  const getFilteredTickets = () => {
+    const processor = new DataProcessor(tickets)
+    const dateFilter = getDateFilterRange()
+    return processor.filterTickets({
+      sdm: selectedSDM || undefined,
+      company: selectedCompany || undefined,
+      dateFrom: dateFilter.from,
+      dateTo: dateFilter.to || undefined
+    }).getTickets()
+  }
+
   const handleCSVUpload = (newTickets: TicketData[]) => {
     try {
       console.log('Processing CSV upload...', { ticketCount: newTickets.length })
@@ -729,7 +741,7 @@ export default function SupportDashboard() {
         <SLAComplianceModal
           isOpen={showSLAModal}
           onClose={() => setShowSLAModal(false)}
-          tickets={tickets}
+          tickets={getFilteredTickets()}
           compliancePercentage={metrics.slaCompliance}
           selectedCompany={selectedCompany}
         />

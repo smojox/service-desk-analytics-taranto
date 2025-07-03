@@ -40,13 +40,8 @@ interface AgentBreachSummary {
 export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage, selectedCompany }: SLAComplianceModalProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   
-  // Filter tickets by selected company if specified
-  const filteredTickets = selectedCompany && selectedCompany !== 'all' 
-    ? tickets.filter(ticket => ticket.companyName === selectedCompany)
-    : tickets
-
-  // Calculate SLA data for tickets
-  const slaTickets: SLATicket[] = filteredTickets.map(ticket => {
+  // Calculate SLA data for tickets (tickets are already filtered by the parent component)
+  const slaTickets: SLATicket[] = tickets.map(ticket => {
     const created = new Date(ticket.createdTime)
     const resolved = ticket.resolvedTime ? new Date(ticket.resolvedTime) : null
     const slaHours = getSLAHours(ticket.priority)

@@ -240,4 +240,8 @@ export class DataProcessor {
 
     return new DataProcessor(filteredTickets)
   }
+
+  getTickets(): TicketData[] {
+    return this.tickets
+  }
 }
