@@ -100,16 +100,16 @@ export class ClientServiceReportGenerator {
     
     const { width, height } = page.getSize()
     
-    // Adjust positioning: move right and down, make white and 50% smaller
+    // Adjust positioning: move right and down, make white and 20% bigger than 50% smaller (so 40% smaller overall)
     const rightOffset = width * 0.65 // Move to right side
-    const downOffset = height * 0.6 // Move down more
+    const downOffset = height * 0.48 // Move down 20% more (was 0.6, now 0.48 = 60% - 20% of 60%)
     
-    // Client name (positioned to the right and down, white, 50% smaller)
+    // Client name (positioned to the right and down, white, 20% bigger than previous)
     if (company && company !== 'all') {
       page.drawText(`Client: ${company}`, {
         x: rightOffset,
         y: downOffset,
-        size: 12, // 50% smaller from 24
+        size: 14.4, // 20% bigger than 12 (12 * 1.2 = 14.4)
         font: boldFont,
         color: rgb(1, 1, 1), // White text
       })
@@ -120,7 +120,7 @@ export class ClientServiceReportGenerator {
     page.drawText(`Report Period: ${periodLabel}`, {
       x: rightOffset,
       y: downOffset - 30,
-      size: 9, // 50% smaller from 18
+      size: 10.8, // 20% bigger than 9 (9 * 1.2 = 10.8)
       font: font,
       color: rgb(1, 1, 1), // White text
     })
@@ -131,7 +131,7 @@ export class ClientServiceReportGenerator {
       page.drawText(sdmText, {
         x: rightOffset,
         y: downOffset - 60,
-        size: 8, // 50% smaller from 16
+        size: 9.6, // 20% bigger than 8 (8 * 1.2 = 9.6)
         font: font,
         color: rgb(1, 1, 1), // White text
       })
@@ -146,7 +146,7 @@ export class ClientServiceReportGenerator {
     page.drawText(dateText, {
       x: rightOffset,
       y: downOffset - 90,
-      size: 6, // 50% smaller from 12
+      size: 7.2, // 20% bigger than 6 (6 * 1.2 = 7.2)
       font: font,
       color: rgb(1, 1, 1), // White text
     })
@@ -171,7 +171,7 @@ export class ClientServiceReportGenerator {
       'Questions & Discussion'
     ]
     
-    const startY = height - 150 // Adjust based on template layout
+    const startY = height - 206 // Move down 2cm more (was 150, now 206 = 150 + 56 points)
     const itemHeight = 25
     
     agendaItems.forEach((item, index) => {
