@@ -1,7 +1,6 @@
 "use client"
 
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { TicketData } from '@/lib/csv-parser'
 import { DashboardMetrics, ChartData } from '@/lib/data-processor'
 
@@ -15,51 +14,49 @@ interface PDFExportProps {
 }
 
 export class ClientServiceReportGenerator {
-  private pdf: jsPDF
-  private pageWidth: number
-  private pageHeight: number
-  private margin: number
-  private currentY: number
-  private lineHeight: number
-  private templatePages: string[] = []
+  private templateDoc: PDFDocument | null = null
+  private newDoc: PDFDocument | null = null
 
   constructor() {
-    this.pdf = new jsPDF('l', 'mm', 'a4') // Landscape orientation
-    this.pageWidth = this.pdf.internal.pageSize.getWidth()
-    this.pageHeight = this.pdf.internal.pageSize.getHeight()
-    this.margin = 30
-    this.currentY = this.margin
-    this.lineHeight = 6
+    this.templateDoc = null
+    this.newDoc = null
   }
 
   async generateReport(data: PDFExportProps): Promise<void> {
     const { metrics, tickets, chartData, selectedSDM, selectedCompany, selectedDateFilter } = data
     
     try {
-      // Load template pages
-      await this.loadTemplatePages()
+      // Load template PDF
+      await this.loadTemplatePDF()
       
-      // Page 1: Title Page with template background
+      // Create new PDF document
+      this.newDoc = await PDFDocument.create()
+      
+      // Copy and modify specific pages from template
       await this.createTitlePageWithTemplate(selectedCompany, selectedDateFilter, selectedSDM)
-      
-      // Page 2: Agenda with template background
-      await this.createAgendaPage()
-      
-      // Page 3: Service Report Content
-      await this.createServiceReportPage(metrics, tickets, chartData)
-      
-      // Page 4: Questions Page (template only)
-      await this.createQuestionsPage()
-      
-      // Page 5: Final Page (template only)
-      await this.createFinalPage()
+      await this.createAgendaPageWithTemplate()
+      await this.createServiceReportPageWithTemplate(metrics, tickets, chartData)
+      await this.createQuestionsPageWithTemplate()
+      await this.createFinalPageWithTemplate()
       
       // Generate and download
+      const pdfBytes = await this.newDoc.save()
       const timestamp = new Date().toISOString().split('T')[0]
       const companyName = selectedCompany && selectedCompany !== 'all' ? selectedCompany.replace(/[^a-zA-Z0-9]/g, '_') : 'All_Companies'
       const filename = `Service_Review_${companyName}_${timestamp}.pdf`
       
-      this.pdf.save(filename)
+      // Download the PDF
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.style.display = 'none'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
     } catch (error) {
       console.error('Error generating PDF with templates:', error)
       // Fallback to basic PDF without templates
@@ -67,55 +64,99 @@ export class ClientServiceReportGenerator {
     }
   }
 
-  private async loadTemplatePages(): Promise<void> {
-    // For now, we'll create the PDF structure
-    // In a production environment, you would extract pages from the template PDF
-    // This requires additional libraries like pdf-lib or similar
-    console.log('Template loading - using structured approach')
+  private async loadTemplatePDF(): Promise<void> {
+    try {
+      const response = await fetch('/Template.pdf')
+      if (!response.ok) {
+        throw new Error('Template PDF not found')
+      }
+      const templateBytes = await response.arrayBuffer()
+      this.templateDoc = await PDFDocument.load(templateBytes)
+    } catch (error) {
+      console.error('Error loading template PDF:', error)
+      throw error
+    }
+  }
+
+  private async copyTemplatePageWithOverlay(templatePageIndex: number): Promise<any> {
+    if (!this.templateDoc || !this.newDoc) {
+      throw new Error('Template or new document not initialized')
+    }
+
+    // Copy the specific page from template
+    const [templatePage] = await this.newDoc.copyPages(this.templateDoc, [templatePageIndex])
+    const page = this.newDoc.addPage(templatePage)
+    
+    return page
   }
 
   private async createTitlePageWithTemplate(company?: string, dateFilter?: string, sdm?: string): Promise<void> {
-    // Add background for page 1 template
-    this.addTemplateBackground(1)
+    // Use Page 1 (index 0) of template
+    const page = await this.copyTemplatePageWithOverlay(0)
+    const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+    const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
     
-    // Add content below the Taranto25 logo (positioned around y=100 for landscape)
-    const centerX = this.pageWidth / 2
+    const { width, height } = page.getSize()
     
-    // Client name
+    // Add content below Taranto25 logo (adjust Y coordinates based on your template layout)
+    const centerX = width / 2
+    
+    // Client name (positioned to not overlap with logo)
     if (company && company !== 'all') {
-      this.pdf.setTextColor(51, 51, 51)
-      this.pdf.setFontSize(24)
-      this.pdf.setFont('helvetica', 'bold')
-      this.pdf.text(`Client: ${company}`, centerX, 120, { align: 'center' })
+      page.drawText(`Client: ${company}`, {
+        x: centerX - (company.length * 8), // Center the text approximately
+        y: height - 200, // Adjust Y position based on your template
+        size: 24,
+        font: boldFont,
+        color: rgb(0.2, 0.2, 0.2),
+      })
     }
     
     // Report period
     const periodLabel = this.getDateFilterLabel(dateFilter)
-    this.pdf.setFontSize(18)
-    this.pdf.setTextColor(75, 75, 75)
-    this.pdf.text(`Report Period: ${periodLabel}`, centerX, 140, { align: 'center' })
+    page.drawText(`Report Period: ${periodLabel}`, {
+      x: centerX - (periodLabel.length * 6),
+      y: height - 240,
+      size: 18,
+      font: font,
+      color: rgb(0.3, 0.3, 0.3),
+    })
     
     // SDM
     if (sdm && sdm !== 'all') {
-      this.pdf.setFontSize(16)
-      this.pdf.text(`Service Delivery Manager: ${sdm}`, centerX, 160, { align: 'center' })
+      const sdmText = `Service Delivery Manager: ${sdm}`
+      page.drawText(sdmText, {
+        x: centerX - (sdmText.length * 5),
+        y: height - 280,
+        size: 16,
+        font: font,
+        color: rgb(0.3, 0.3, 0.3),
+      })
     }
     
     // Generated date
-    this.pdf.setFontSize(12)
-    this.pdf.setTextColor(100, 100, 100)
-    this.pdf.text(`Generated: ${new Date().toLocaleDateString('en-GB', { 
+    const dateText = `Generated: ${new Date().toLocaleDateString('en-GB', { 
       day: '2-digit', 
       month: 'long', 
       year: 'numeric' 
-    })}`, centerX, 180, { align: 'center' })
+    })}`
+    page.drawText(dateText, {
+      x: centerX - (dateText.length * 4),
+      y: height - 320,
+      size: 12,
+      font: font,
+      color: rgb(0.4, 0.4, 0.4),
+    })
   }
 
-  private async createAgendaPage(): Promise<void> {
-    this.pdf.addPage()
-    this.addTemplateBackground(2)
+  private async createAgendaPageWithTemplate(): Promise<void> {
+    // Use Page 2 (index 1) of template
+    const page = await this.copyTemplatePageWithOverlay(1)
+    const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
     
-    // Add agenda items - positioned to work with template layout
+    const { height } = page.getSize()
+    
+    // Add agenda items (adjust positions based on your template)
     const agendaItems = [
       'Service Performance Overview',
       'SLA Compliance Analysis', 
@@ -127,114 +168,92 @@ export class ClientServiceReportGenerator {
       'Questions & Discussion'
     ]
     
-    // Position agenda items (adjust coordinates based on your template)
-    this.pdf.setTextColor(51, 51, 51)
-    this.pdf.setFontSize(16)
-    this.pdf.setFont('helvetica', 'normal')
-    
-    const startY = 80
-    const itemHeight = 15
+    const startY = height - 150 // Adjust based on template layout
+    const itemHeight = 25
     
     agendaItems.forEach((item, index) => {
-      const y = startY + (index * itemHeight)
-      this.pdf.text(`${index + 1}. ${item}`, 50, y)
+      const y = startY - (index * itemHeight)
+      page.drawText(`${index + 1}. ${item}`, {
+        x: 80, // Adjust X position based on template
+        y: y,
+        size: 16,
+        font: font,
+        color: rgb(0.2, 0.2, 0.2),
+      })
     })
   }
 
-  private async createServiceReportPage(metrics: DashboardMetrics, tickets: TicketData[], chartData: ChartData): Promise<void> {
-    this.pdf.addPage()
-    this.addTemplateBackground(3)
+  private async createServiceReportPageWithTemplate(metrics: DashboardMetrics, tickets: TicketData[], chartData: ChartData): Promise<void> {
+    // Use Page 3 (index 2) of template - the blank canvas
+    const page = await this.copyTemplatePageWithOverlay(2)
+    const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+    const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
     
-    // Use the blank canvas (page 3) to layout all service data
-    await this.layoutServiceData(metrics, tickets, chartData)
+    const { width, height } = page.getSize()
+    
+    // Layout service data in 6 sections on the blank canvas
+    await this.addServiceDataSections(page, font, boldFont, metrics, tickets, chartData, width, height)
   }
 
-  private async createQuestionsPage(): Promise<void> {
-    this.pdf.addPage()
-    this.addTemplateBackground(7) // Page 7 from template
+  private async createQuestionsPageWithTemplate(): Promise<void> {
+    // Use Page 7 (index 6) of template
+    await this.copyTemplatePageWithOverlay(6)
     // No additional content needed - template handles this
   }
 
-  private async createFinalPage(): Promise<void> {
-    this.pdf.addPage()
-    this.addTemplateBackground(8) // Page 8 from template
+  private async createFinalPageWithTemplate(): Promise<void> {
+    // Use Page 8 (index 7) of template  
+    await this.copyTemplatePageWithOverlay(7)
     // No additional content needed - template handles this
   }
 
-  private addTemplateBackground(pageNumber: number): void {
-    // This would load the specific page from template.pdf as background
-    // For now, we'll add a placeholder that indicates which template page this represents
-    this.pdf.setFillColor(245, 247, 250)
-    this.pdf.rect(0, 0, this.pageWidth, this.pageHeight, 'F')
+  private async addServiceDataSections(page: any, font: any, boldFont: any, metrics: DashboardMetrics, tickets: TicketData[], chartData: ChartData, width: number, height: number): Promise<void> {
+    const sectionTitleSize = 14
+    const textSize = 10
+    const tealColor = rgb(0.06, 0.46, 0.43) // Teal color matching dashboard
+    const textColor = rgb(0.2, 0.2, 0.2)
     
-    // Add template page indicator (remove this in production)
-    this.pdf.setTextColor(200, 200, 200)
-    this.pdf.setFontSize(8)
-    this.pdf.text(`Template Page ${pageNumber}`, 10, 10)
-  }
-
-  private async layoutServiceData(metrics: DashboardMetrics, tickets: TicketData[], chartData: ChartData): Promise<void> {
-    // Layout all service data on the blank canvas (page 3)
+    // Section positions (adjust based on your template layout)
+    const leftX = 60
+    const rightX = width / 2 + 30
+    const topY = height - 100
+    const middleY = height - 250
+    const bottomY = height - 400
     
-    // Key Metrics Section (Top Left)
-    await this.addKeyMetricsSection(metrics, 30, 40)
+    // Top Left: Key Metrics
+    page.drawText('Key Performance Metrics', {
+      x: leftX,
+      y: topY,
+      size: sectionTitleSize,
+      font: boldFont,
+      color: tealColor,
+    })
     
-    // SLA Performance (Top Right)
-    await this.addSLASection(metrics, tickets, 160, 40)
-    
-    // Current Status (Middle Left)
-    await this.addCurrentStatusSection(tickets, 30, 100)
-    
-    // Escalated Tickets (Middle Right)
-    await this.addEscalatedTicketsSection(tickets, 160, 100)
-    
-    // Ticket Types (Bottom Left)
-    await this.addTicketTypesSection(chartData, 30, 160)
-    
-    // Performance Summary (Bottom Right)
-    await this.addPerformanceSummarySection(metrics, tickets, 160, 160)
-  }
-
-  private async addKeyMetricsSection(metrics: DashboardMetrics, x: number, y: number): Promise<void> {
-    // Section title
-    this.pdf.setTextColor(15, 118, 110)
-    this.pdf.setFontSize(14)
-    this.pdf.setFont('helvetica', 'bold')
-    this.pdf.text('Key Performance Metrics', x, y)
-    
-    // Metrics
     const metricsData = [
-      { label: 'Total Tickets', value: metrics.totalTickets.toString() },
-      { label: 'Open Tickets', value: metrics.openTickets.toString() },
-      { label: 'SLA Compliance', value: `${metrics.slaCompliance}%` },
-      { label: 'Avg Resolution', value: `${metrics.avgResolution}h` }
+      `Total Tickets: ${metrics.totalTickets}`,
+      `Open Tickets: ${metrics.openTickets}`,
+      `SLA Compliance: ${metrics.slaCompliance}%`,
+      `Avg Resolution: ${metrics.avgResolution}h`
     ]
     
-    this.pdf.setFontSize(10)
-    this.pdf.setFont('helvetica', 'normal')
-    this.pdf.setTextColor(51, 51, 51)
-    
     metricsData.forEach((metric, index) => {
-      const itemY = y + 15 + (index * 8)
-      this.pdf.setFont('helvetica', 'bold')
-      this.pdf.text(`${metric.label}:`, x, itemY)
-      this.pdf.setFont('helvetica', 'normal')
-      this.pdf.text(metric.value, x + 40, itemY)
+      page.drawText(metric, {
+        x: leftX,
+        y: topY - 30 - (index * 20),
+        size: textSize,
+        font: font,
+        color: textColor,
+      })
     })
-  }
-
-  private async addSLASection(metrics: DashboardMetrics, tickets: TicketData[], x: number, y: number): Promise<void> {
-    this.pdf.setTextColor(15, 118, 110)
-    this.pdf.setFontSize(14)
-    this.pdf.setFont('helvetica', 'bold')
-    this.pdf.text('SLA Performance', x, y)
     
-    // SLA status indicator
-    const slaColor = metrics.slaCompliance >= 90 ? [16, 185, 129] : 
-                    metrics.slaCompliance >= 70 ? [245, 158, 11] : [239, 68, 68]
-    
-    this.pdf.setFillColor(slaColor[0], slaColor[1], slaColor[2])
-    this.pdf.rect(x, y + 5, 100, 3, 'F')
+    // Top Right: SLA Performance
+    page.drawText('SLA Performance', {
+      x: rightX,
+      y: topY,
+      size: sectionTitleSize,
+      font: boldFont,
+      color: tealColor,
+    })
     
     const breachedTickets = tickets.filter(t => 
       t.resolutionStatus === 'SLA Violated' || 
@@ -245,18 +264,30 @@ export class ClientServiceReportGenerator {
     
     const compliantTickets = tickets.length - breachedTickets
     
-    this.pdf.setFontSize(10)
-    this.pdf.setTextColor(51, 51, 51)
-    this.pdf.text(`Compliance Rate: ${metrics.slaCompliance}%`, x, y + 20)
-    this.pdf.text(`Within SLA: ${compliantTickets}`, x, y + 28)
-    this.pdf.text(`Breached: ${breachedTickets}`, x, y + 36)
-  }
-
-  private async addCurrentStatusSection(tickets: TicketData[], x: number, y: number): Promise<void> {
-    this.pdf.setTextColor(15, 118, 110)
-    this.pdf.setFontSize(14)
-    this.pdf.setFont('helvetica', 'bold')
-    this.pdf.text('Current Ticket Status', x, y)
+    const slaData = [
+      `Compliance Rate: ${metrics.slaCompliance}%`,
+      `Within SLA: ${compliantTickets}`,
+      `Breached: ${breachedTickets}`,
+    ]
+    
+    slaData.forEach((item, index) => {
+      page.drawText(item, {
+        x: rightX,
+        y: topY - 30 - (index * 20),
+        size: textSize,
+        font: font,
+        color: textColor,
+      })
+    })
+    
+    // Middle Left: Current Status
+    page.drawText('Current Ticket Status', {
+      x: leftX,
+      y: middleY,
+      size: sectionTitleSize,
+      font: boldFont,
+      color: tealColor,
+    })
     
     const statusCounts: { [key: string]: number } = {}
     tickets.forEach(ticket => {
@@ -264,87 +295,89 @@ export class ClientServiceReportGenerator {
       statusCounts[status] = (statusCounts[status] || 0) + 1
     })
     
-    this.pdf.setFontSize(10)
-    this.pdf.setTextColor(51, 51, 51)
-    
     Object.entries(statusCounts).slice(0, 5).forEach(([status, count], index) => {
-      const itemY = y + 15 + (index * 8)
-      this.pdf.text(`${status}: ${count}`, x, itemY)
+      page.drawText(`${status}: ${count}`, {
+        x: leftX,
+        y: middleY - 30 - (index * 16),
+        size: textSize,
+        font: font,
+        color: textColor,
+      })
     })
-  }
-
-  private async addEscalatedTicketsSection(tickets: TicketData[], x: number, y: number): Promise<void> {
-    this.pdf.setTextColor(15, 118, 110)
-    this.pdf.setFontSize(14)
-    this.pdf.setFont('helvetica', 'bold')
-    this.pdf.text('Escalated Tickets', x, y)
+    
+    // Middle Right: Escalated Tickets
+    page.drawText('Escalated Tickets', {
+      x: rightX,
+      y: middleY,
+      size: sectionTitleSize,
+      font: boldFont,
+      color: tealColor,
+    })
     
     const escalatedTickets = tickets.filter(t => t.sdmEscalation === 'true')
     const escalationRate = ((escalatedTickets.length / tickets.length) * 100).toFixed(1)
     
-    this.pdf.setFontSize(10)
-    this.pdf.setTextColor(51, 51, 51)
-    this.pdf.text(`Total Escalations: ${escalatedTickets.length}`, x, y + 15)
-    this.pdf.text(`Escalation Rate: ${escalationRate}%`, x, y + 23)
+    const escalationData = [
+      `Total Escalations: ${escalatedTickets.length}`,
+      `Escalation Rate: ${escalationRate}%`,
+    ]
     
-    // Recent escalations
-    const recentEscalations = escalatedTickets
-      .sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime())
-      .slice(0, 3)
-    
-    if (recentEscalations.length > 0) {
-      this.pdf.setFontSize(9)
-      this.pdf.text('Recent:', x, y + 35)
-      recentEscalations.forEach((ticket, index) => {
-        const itemY = y + 43 + (index * 6)
-        this.pdf.text(`• ${ticket.ticketId}`, x, itemY)
+    escalationData.forEach((item, index) => {
+      page.drawText(item, {
+        x: rightX,
+        y: middleY - 30 - (index * 20),
+        size: textSize,
+        font: font,
+        color: textColor,
       })
-    }
-  }
-
-  private async addTicketTypesSection(chartData: ChartData, x: number, y: number): Promise<void> {
-    this.pdf.setTextColor(15, 118, 110)
-    this.pdf.setFontSize(14)
-    this.pdf.setFont('helvetica', 'bold')
-    this.pdf.text('Top Ticket Types', x, y)
+    })
+    
+    // Bottom Left: Top Ticket Types
+    page.drawText('Top Ticket Types', {
+      x: leftX,
+      y: bottomY,
+      size: sectionTitleSize,
+      font: boldFont,
+      color: tealColor,
+    })
     
     const topTypes = chartData.openTicketTypeData.slice(0, 5)
-    
-    this.pdf.setFontSize(10)
-    this.pdf.setTextColor(51, 51, 51)
-    
     topTypes.forEach((type, index) => {
-      const itemY = y + 15 + (index * 8)
-      this.pdf.text(`${type.type}: ${type.count}`, x, itemY)
+      page.drawText(`${type.type}: ${type.count}`, {
+        x: leftX,
+        y: bottomY - 30 - (index * 16),
+        size: textSize,
+        font: font,
+        color: textColor,
+      })
     })
-  }
-
-  private async addPerformanceSummarySection(metrics: DashboardMetrics, tickets: TicketData[], x: number, y: number): Promise<void> {
-    this.pdf.setTextColor(15, 118, 110)
-    this.pdf.setFontSize(14)
-    this.pdf.setFont('helvetica', 'bold')
-    this.pdf.text('Performance Summary', x, y)
     
-    // Generate performance assessment
+    // Bottom Right: Performance Summary
+    page.drawText('Performance Summary', {
+      x: rightX,
+      y: bottomY,
+      size: sectionTitleSize,
+      font: boldFont,
+      color: tealColor,
+    })
+    
     const performance = metrics.slaCompliance >= 90 ? 'Excellent' : metrics.slaCompliance >= 70 ? 'Good' : 'Needs Attention'
     const resolution = metrics.avgResolution <= 8 ? 'Fast' : metrics.avgResolution <= 24 ? 'Moderate' : 'Slow'
     
-    this.pdf.setFontSize(10)
-    this.pdf.setTextColor(51, 51, 51)
-    
-    const summaryLines = [
-      `Overall Performance: ${performance}`,
-      `Resolution Speed: ${resolution}`,
+    const summaryData = [
+      `Overall: ${performance}`,
+      `Resolution: ${resolution}`,
       `Service Level: ${metrics.slaCompliance}%`,
-      `Open Tickets: ${metrics.openTickets}`,
-      ''
     ]
     
-    summaryLines.forEach((line, index) => {
-      if (line) {
-        const itemY = y + 15 + (index * 8)
-        this.pdf.text(line, x, itemY)
-      }
+    summaryData.forEach((item, index) => {
+      page.drawText(item, {
+        x: rightX,
+        y: bottomY - 30 - (index * 20),
+        size: textSize,
+        font: font,
+        color: textColor,
+      })
     })
   }
 
@@ -352,20 +385,47 @@ export class ClientServiceReportGenerator {
     // Fallback basic report without templates
     const { selectedCompany, selectedDateFilter } = data
     
-    this.pdf.setTextColor(51, 51, 51)
-    this.pdf.setFontSize(20)
-    this.pdf.text('Service Desk Report', this.pageWidth / 2, 50, { align: 'center' })
+    // Create a simple PDF using pdf-lib
+    const doc = await PDFDocument.create()
+    const page = doc.addPage([595.28, 841.89]) // A4 size
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    
+    const { width, height } = page.getSize()
+    
+    page.drawText('Service Desk Report', {
+      x: width / 2 - 100,
+      y: height - 100,
+      size: 20,
+      font: font,
+      color: rgb(0.2, 0.2, 0.2),
+    })
     
     if (selectedCompany && selectedCompany !== 'all') {
-      this.pdf.setFontSize(16)
-      this.pdf.text(`Client: ${selectedCompany}`, this.pageWidth / 2, 70, { align: 'center' })
+      page.drawText(`Client: ${selectedCompany}`, {
+        x: width / 2 - 80,
+        y: height - 140,
+        size: 16,
+        font: font,
+        color: rgb(0.3, 0.3, 0.3),
+      })
     }
     
+    const pdfBytes = await doc.save()
     const timestamp = new Date().toISOString().split('T')[0]
     const companyName = selectedCompany && selectedCompany !== 'all' ? selectedCompany.replace(/[^a-zA-Z0-9]/g, '_') : 'All_Companies'
     const filename = `Service_Review_${companyName}_${timestamp}.pdf`
     
-    this.pdf.save(filename)
+    // Download the PDF
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   private getDateFilterLabel(dateFilter?: string): string {
