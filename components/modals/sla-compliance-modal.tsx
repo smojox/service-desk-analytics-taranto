@@ -1,11 +1,11 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { X, FileSpreadsheet, User, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { X, FileSpreadsheet, User, AlertTriangle, CheckCircle, Clock, ToggleLeft, ToggleRight } from 'lucide-react'
 import { TicketData } from '@/lib/csv-parser'
 
 interface SLAComplianceModalProps {
@@ -14,6 +14,7 @@ interface SLAComplianceModalProps {
   tickets: TicketData[]
   compliancePercentage: number
   selectedCompany?: string
+  onSLAOverrideChange?: (overrides: { [ticketId: string]: boolean }) => void
 }
 
 interface SLATicket {
@@ -37,8 +38,9 @@ interface AgentBreachSummary {
   breachPercentage: number
 }
 
-export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage, selectedCompany }: SLAComplianceModalProps) {
+export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage, selectedCompany, onSLAOverrideChange }: SLAComplianceModalProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [slaOverrides, setSlaOverrides] = useState<{ [ticketId: string]: boolean }>({})
   
   // Calculate SLA data for tickets (tickets are already filtered by the parent component)
   const slaTickets: SLATicket[] = tickets.map(ticket => {
@@ -74,6 +76,11 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
     } else {
       // Default case - use time calculation
       isBreached = actualHours > slaHours
+    }
+    
+    // Apply manual override if exists
+    if (slaOverrides.hasOwnProperty(ticket.ticketId)) {
+      isBreached = slaOverrides[ticket.ticketId]
     }
     
     return {
@@ -125,6 +132,27 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
 
   // Sort agents by breach count (highest first)
   agentBreachSummaries.sort((a, b) => b.breachedCount - a.breachedCount)
+
+  // Handle SLA status toggle
+  const toggleSLAStatus = (ticketId: string, currentStatus: boolean) => {
+    const newOverrides = {
+      ...slaOverrides,
+      [ticketId]: !currentStatus
+    }
+    setSlaOverrides(newOverrides)
+    
+    // Notify parent component of the change
+    if (onSLAOverrideChange) {
+      onSLAOverrideChange(newOverrides)
+    }
+  }
+
+  // Calculate updated compliance percentage with overrides
+  const breachedCount = slaTickets.filter(t => t.isBreached).length
+  const compliantCount = slaTickets.length - breachedCount
+  const updatedCompliancePercentage = slaTickets.length > 0 
+    ? Math.round((compliantCount / slaTickets.length) * 100 * 10) / 10 
+    : 0
 
   // Filter tickets for selected agent
   const agentTickets = selectedAgent 
@@ -181,9 +209,9 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>SLA Compliance Overview</span>
-                <Badge className={`${compliancePercentage >= 90 ? 'bg-green-100 text-green-800' : 
-                  compliancePercentage >= 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
-                  {compliancePercentage}% Compliance
+                <Badge className={`${updatedCompliancePercentage >= 90 ? 'bg-green-100 text-green-800' : 
+                  updatedCompliancePercentage >= 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                  {updatedCompliancePercentage}% Compliance
                 </Badge>
               </CardTitle>
             </CardHeader>
@@ -305,19 +333,37 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`flex items-center ${ticket.isBreached ? 'text-red-600' : 'text-green-600'}`}>
-                            {ticket.isBreached ? (
-                              <AlertTriangle className="h-4 w-4 mr-1" />
-                            ) : (
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                            )}
-                            <span className="font-medium">
-                              {ticket.isBreached ? 'Breached' : 'Within SLA'}
-                            </span>
+                          <div className="flex items-center justify-end space-x-3">
+                            <div className={`flex items-center ${ticket.isBreached ? 'text-red-600' : 'text-green-600'}`}>
+                              {ticket.isBreached ? (
+                                <AlertTriangle className="h-4 w-4 mr-1" />
+                              ) : (
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                              )}
+                              <span className="font-medium">
+                                {ticket.isBreached ? 'Breached' : 'Within SLA'}
+                              </span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="p-1 h-8 w-8"
+                              onClick={() => toggleSLAStatus(ticket.ticketId, ticket.isBreached)}
+                              title={`Toggle to ${ticket.isBreached ? 'Within SLA' : 'Breached'}`}
+                            >
+                              {ticket.isBreached ? (
+                                <ToggleLeft className="h-5 w-5 text-red-600" />
+                              ) : (
+                                <ToggleRight className="h-5 w-5 text-green-600" />
+                              )}
+                            </Button>
                           </div>
                           <div className="text-sm text-gray-600 mt-1">
                             <Clock className="h-3 w-3 inline mr-1" />
                             {ticket.actualHours}h / {ticket.slaHours}h SLA
+                            {slaOverrides.hasOwnProperty(ticket.ticketId) && (
+                              <span className="ml-2 text-blue-600 text-xs">(Manual Override)</span>
+                            )}
                           </div>
                         </div>
                       </div>

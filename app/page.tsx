@@ -88,6 +88,7 @@ export default function SupportDashboard() {
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all')
   const [showSLAModal, setShowSLAModal] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
+  const [slaOverrides, setSlaOverrides] = useState<{ [ticketId: string]: boolean }>({})
 
   // Don't load CSV data on mount - wait for user upload
 
@@ -96,7 +97,7 @@ export default function SupportDashboard() {
     if (tickets.length > 0) {
       updateDashboardData()
     }
-  }, [selectedSDM, selectedCompany, selectedDateFilter, tickets])
+  }, [selectedSDM, selectedCompany, selectedDateFilter, tickets, slaOverrides])
 
   // Update company options when SDM changes
   useEffect(() => {
@@ -231,7 +232,7 @@ export default function SupportDashboard() {
   }
 
   const updateDashboardData = () => {
-    const processor = new DataProcessor(tickets)
+    const processor = new DataProcessor(tickets, slaOverrides)
     const dateFilter = getDateFilterRange()
     const filteredProcessor = processor.filterTickets({
       sdm: selectedSDM || undefined,
@@ -248,7 +249,7 @@ export default function SupportDashboard() {
 
   // Get filtered tickets for the modal
   const getFilteredTickets = () => {
-    const processor = new DataProcessor(tickets)
+    const processor = new DataProcessor(tickets, slaOverrides)
     const dateFilter = getDateFilterRange()
     return processor.filterTickets({
       sdm: selectedSDM || undefined,
@@ -256,6 +257,11 @@ export default function SupportDashboard() {
       dateFrom: dateFilter.from,
       dateTo: dateFilter.to || undefined
     }).getTickets()
+  }
+
+  // Handle SLA override changes from modal
+  const handleSLAOverrideChange = (newOverrides: { [ticketId: string]: boolean }) => {
+    setSlaOverrides(newOverrides)
   }
 
   const handleCSVUpload = (newTickets: TicketData[]) => {
@@ -747,6 +753,7 @@ export default function SupportDashboard() {
           tickets={getFilteredTickets()}
           compliancePercentage={metrics.slaCompliance}
           selectedCompany={selectedCompany}
+          onSLAOverrideChange={handleSLAOverrideChange}
         />
       )}
       

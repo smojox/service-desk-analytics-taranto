@@ -35,9 +35,11 @@ export interface ChartData {
 
 export class DataProcessor {
   private tickets: TicketData[] = []
+  private slaOverrides: { [ticketId: string]: boolean } = {}
 
-  constructor(tickets: TicketData[]) {
+  constructor(tickets: TicketData[], slaOverrides: { [ticketId: string]: boolean } = {}) {
     this.tickets = tickets
+    this.slaOverrides = slaOverrides
   }
 
   calculateMetrics(): DashboardMetrics {
@@ -93,6 +95,11 @@ export class DataProcessor {
           const dueDate = new Date(ticket.dueByTime)
           isCompliant = dueDate > today
         }
+      }
+      
+      // Apply manual override if exists (true = breached, so invert for compliance)
+      if (this.slaOverrides.hasOwnProperty(ticket.ticketId)) {
+        isCompliant = !this.slaOverrides[ticket.ticketId]
       }
       
       if (isCompliant) {
@@ -250,7 +257,7 @@ export class DataProcessor {
       )
     }
 
-    return new DataProcessor(filteredTickets)
+    return new DataProcessor(filteredTickets, this.slaOverrides)
   }
 
   getTickets(): TicketData[] {
