@@ -29,8 +29,8 @@ export interface RecentTicket {
 }
 
 export interface ChartData {
-  ticketVolumeData: Array<{ date: string; count: number }>
-  ticketTypeData: Array<{ type: string; count: number }>
+  ticketVolumeData: Array<{ month: string; created: number; resolved: number }>
+  openTicketTypeData: Array<{ type: string; count: number }>
 }
 
 export class DataProcessor {
@@ -123,29 +123,67 @@ export class DataProcessor {
   }
 
   getChartData(): ChartData {
-    const ticketVolumeMap = new Map<string, number>()
-    const ticketTypeMap = new Map<string, number>()
+    // Get monthly data for last year or all data if less than a year
+    const now = new Date()
+    const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1)
+    
+    const createdByMonth = new Map<string, number>()
+    const resolvedByMonth = new Map<string, number>()
+    const openTicketTypes = new Map<string, number>()
 
+    // Process all tickets for volume chart (ignore current filters for this chart)
     this.tickets.forEach(ticket => {
-      const date = new Date(ticket.createdTime).toISOString().split('T')[0]
-      ticketVolumeMap.set(date, (ticketVolumeMap.get(date) || 0) + 1)
-      
-      const type = ticket.type || 'Unknown'
-      ticketTypeMap.set(type, (ticketTypeMap.get(type) || 0) + 1)
+      // Created tickets by month
+      const createdDate = new Date(ticket.createdTime)
+      if (createdDate >= oneYearAgo || this.getEarliestTicketDate() > oneYearAgo) {
+        const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`
+        createdByMonth.set(monthKey, (createdByMonth.get(monthKey) || 0) + 1)
+      }
+
+      // Resolved tickets by month
+      if (ticket.resolvedTime && ticket.resolvedTime.trim() !== '') {
+        const resolvedDate = new Date(ticket.resolvedTime)
+        if (resolvedDate >= oneYearAgo || this.getEarliestTicketDate() > oneYearAgo) {
+          const monthKey = `${resolvedDate.getFullYear()}-${String(resolvedDate.getMonth() + 1).padStart(2, '0')}`
+          resolvedByMonth.set(monthKey, (resolvedByMonth.get(monthKey) || 0) + 1)
+        }
+      }
     })
 
-    const ticketVolumeData = Array.from(ticketVolumeMap.entries())
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date))
+    // Process open tickets for type breakdown (apply current filters)
+    this.tickets
+      .filter(ticket => ticket.status !== 'Resolved' && ticket.status !== 'Closed')
+      .forEach(ticket => {
+        const type = ticket.type || 'Unknown'
+        openTicketTypes.set(type, (openTicketTypes.get(type) || 0) + 1)
+      })
 
-    const ticketTypeData = Array.from(ticketTypeMap.entries())
+    // Generate monthly data
+    const allMonths = new Set([...createdByMonth.keys(), ...resolvedByMonth.keys()])
+    const ticketVolumeData = Array.from(allMonths)
+      .sort()
+      .map(month => ({
+        month,
+        created: createdByMonth.get(month) || 0,
+        resolved: resolvedByMonth.get(month) || 0
+      }))
+
+    const openTicketTypeData = Array.from(openTicketTypes.entries())
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count)
 
     return {
       ticketVolumeData,
-      ticketTypeData
+      openTicketTypeData
     }
+  }
+
+  private getEarliestTicketDate(): Date {
+    const dates = this.tickets
+      .map(ticket => new Date(ticket.createdTime))
+      .filter(date => !isNaN(date.getTime()))
+    
+    return dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))) : new Date()
   }
 
   getUniqueSDMs(): string[] {

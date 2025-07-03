@@ -56,13 +56,12 @@ export default function SupportDashboard() {
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null)
   const [selectedSDM, setSelectedSDM] = useState<string>("")
   const [selectedCompany, setSelectedCompany] = useState<string>("")
-  const [dateRange, setDateRange] = useState<{
-    from: Date | undefined
-    to: Date | undefined
-  }>({
-    from: undefined,
-    to: undefined,
-  })
+  const dateFilterOptions = [
+    { value: 'all', label: 'All Time' },
+    { value: 'last3months', label: 'Last 3 Months' },
+    { value: 'last6months', label: 'Last 6 Months' },
+    { value: 'lastyear', label: 'Last Year' }
+  ]
   
   const [tickets, setTickets] = useState<TicketData[]>([])
   const [metrics, setMetrics] = useState<DashboardMetrics>({
@@ -80,20 +79,27 @@ export default function SupportDashboard() {
   })
   const [sdmOptions, setSdmOptions] = useState<Array<{value: string, label: string}>>([])
   const [companyOptions, setCompanyOptions] = useState<Array<{value: string, label: string}>>([])
-  const [loading, setLoading] = useState(true)
+  const [filteredCompanyOptions, setFilteredCompanyOptions] = useState<Array<{value: string, label: string}>>([])
+  const [loading, setLoading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
+  const [hasData, setHasData] = useState(false)
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all')
 
-  // Load CSV data on component mount
-  useEffect(() => {
-    loadCSVData()
-  }, [])
+  // Don't load CSV data on mount - wait for user upload
 
   // Update data when filters change
   useEffect(() => {
     if (tickets.length > 0) {
       updateDashboardData()
     }
-  }, [selectedSDM, selectedCompany, dateRange, tickets])
+  }, [selectedSDM, selectedCompany, selectedDateFilter, tickets])
+
+  // Update company options when SDM changes
+  useEffect(() => {
+    if (tickets.length > 0) {
+      updateCompanyOptions()
+    }
+  }, [selectedSDM, tickets])
 
   const loadCSVData = async () => {
     try {
@@ -123,13 +129,56 @@ export default function SupportDashboard() {
     }
   }
 
+  const getDateFilterRange = () => {
+    const now = new Date()
+    switch (selectedDateFilter) {
+      case 'last3months':
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
+        return { from: threeMonthsAgo.toISOString().split('T')[0] }
+      case 'last6months':
+        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1)
+        return { from: sixMonthsAgo.toISOString().split('T')[0] }
+      case 'lastyear':
+        const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1)
+        return { from: oneYearAgo.toISOString().split('T')[0] }
+      default:
+        return {}
+    }
+  }
+
+  const updateCompanyOptions = () => {
+    if (!selectedSDM || selectedSDM === 'all') {
+      setFilteredCompanyOptions(companyOptions)
+      return
+    }
+
+    const sdmTickets = tickets.filter(ticket => ticket.sdm === selectedSDM)
+    const uniqueCompanies = new Set<string>()
+    sdmTickets.forEach(ticket => {
+      if (ticket.companyName && ticket.companyName.trim() !== '') {
+        uniqueCompanies.add(ticket.companyName)
+      }
+    })
+
+    setFilteredCompanyOptions([
+      { value: 'all', label: 'All Companies' },
+      ...Array.from(uniqueCompanies).sort().map(company => ({ value: company, label: company }))
+    ])
+
+    // Reset company selection if current selection is not available for this SDM
+    if (selectedCompany && selectedCompany !== 'all' && !uniqueCompanies.has(selectedCompany)) {
+      setSelectedCompany('all')
+    }
+  }
+
   const updateDashboardData = () => {
     const processor = new DataProcessor(tickets)
+    const dateFilter = getDateFilterRange()
     const filteredProcessor = processor.filterTickets({
       sdm: selectedSDM || undefined,
       company: selectedCompany || undefined,
-      dateFrom: dateRange.from?.toISOString().split('T')[0],
-      dateTo: dateRange.to?.toISOString().split('T')[0]
+      dateFrom: dateFilter.from,
+      dateTo: dateFilter.to
     })
     
     setMetrics(filteredProcessor.calculateMetrics())
@@ -155,8 +204,19 @@ export default function SupportDashboard() {
       ...uniqueCompanies.map(company => ({ value: company, label: company }))
     ])
     
+    setFilteredCompanyOptions([
+      { value: 'all', label: 'All Companies' },
+      ...uniqueCompanies.map(company => ({ value: company, label: company }))
+    ])
+    
     setShowUpload(false)
     setLoading(false)
+    setHasData(true)
+    
+    // Reset filters
+    setSelectedSDM('all')
+    setSelectedCompany('all')
+    setSelectedDateFilter('all')
   }
 
   const MetricCard = ({
@@ -226,8 +286,9 @@ export default function SupportDashboard() {
         </div>
       </header>
 
-      {/* Filter Bar */}
-      <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
+      {/* Filter Bar - only show when data is loaded */}
+      {hasData && (
+        <div className="bg-white/10 backdrop-blur-sm border-b border-white/20">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -250,12 +311,12 @@ export default function SupportDashboard() {
               </Select>
 
               {/* Company Dropdown */}
-              <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
-                  <SelectValue placeholder="Select Company" />
+              <Select value={selectedCompany} onValueChange={setSelectedCompany} disabled={!selectedSDM || selectedSDM === 'all'}>
+                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white disabled:opacity-50">
+                  <SelectValue placeholder={!selectedSDM || selectedSDM === 'all' ? 'Select SDM first' : 'Select Company'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {companyOptions.map((option) => (
+                  {filteredCompanyOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -263,41 +324,19 @@ export default function SupportDashboard() {
                 </SelectContent>
               </Select>
 
-              {/* Date Range Picker */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-64 justify-start text-left font-normal bg-white/20 border-white/30 text-white hover:bg-white/30",
-                      !dateRange.from && "text-white/70",
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.from ? (
-                      dateRange.to ? (
-                        <>
-                          {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
-                        </>
-                      ) : (
-                        format(dateRange.from, "LLL dd, y")
-                      )
-                    ) : (
-                      <span>Pick a date range</span>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    initialFocus
-                    mode="range"
-                    defaultMonth={dateRange.from}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    numberOfMonths={2}
-                  />
-                </PopoverContent>
-              </Popover>
+              {/* Date Filter Dropdown */}
+              <Select value={selectedDateFilter} onValueChange={setSelectedDateFilter}>
+                <SelectTrigger className="w-48 bg-white/20 border-white/30 text-white">
+                  <SelectValue placeholder="Select Time Period" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dateFilterOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {/* Clear Filters Button */}
               <Button
@@ -305,9 +344,9 @@ export default function SupportDashboard() {
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/20"
                 onClick={() => {
-                  setSelectedSDM("")
-                  setSelectedCompany("")
-                  setDateRange({ from: undefined, to: undefined })
+                  setSelectedSDM('all')
+                  setSelectedCompany('all')
+                  setSelectedDateFilter('all')
                 }}
               >
                 Clear Filters
@@ -356,9 +395,35 @@ export default function SupportDashboard() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       <div className="p-6">
+        {/* Initial Upload State */}
+        {!hasData && (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+            <div className="bg-white/80 backdrop-blur-sm rounded-lg p-12 max-w-md">
+              <Upload className="mx-auto h-16 w-16 text-teal-600 mb-6" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Welcome to Service Desk Analytics
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Upload your CSV file to start analyzing your service desk data and gain insights into ticket trends, SLA compliance, and team performance.
+              </p>
+              <Button
+                onClick={() => setShowUpload(true)}
+                size="lg"
+                className="bg-teal-600 hover:bg-teal-700"
+              >
+                <Upload className="mr-2 h-5 w-5" />
+                Upload CSV Data
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Dashboard Content - only show when data is loaded */}
+        {hasData && (
         {/* Key Metrics */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
@@ -415,7 +480,7 @@ export default function SupportDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <Card className="border-0 bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-gray-900">Ticket Volume</CardTitle>
+              <CardTitle className="text-gray-900">Monthly Created vs Resolved Tickets</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -426,8 +491,8 @@ export default function SupportDashboard() {
                 <div className="h-64 flex items-center justify-center text-gray-500">
                   <BarChart3 className="h-8 w-8 mr-2" />
                   {chartData.ticketVolumeData.length > 0 ? 
-                    `${chartData.ticketVolumeData.length} data points available` : 
-                    'Chart visualization would go here'
+                    `Monthly Created vs Resolved Tickets (${chartData.ticketVolumeData.length} months)` : 
+                    'Monthly ticket volume chart'
                   }
                 </div>
               )}
@@ -436,7 +501,7 @@ export default function SupportDashboard() {
 
           <Card className="border-0 bg-white/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-gray-900">Ticket Type Breakdown</CardTitle>
+              <CardTitle className="text-gray-900">Open Tickets by Type</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -446,9 +511,9 @@ export default function SupportDashboard() {
               ) : (
                 <div className="h-64 flex items-center justify-center text-gray-500">
                   <PieChart className="h-8 w-8 mr-2" />
-                  {chartData.ticketTypeData.length > 0 ? 
-                    `${chartData.ticketTypeData.length} ticket types` : 
-                    'Chart visualization would go here'
+                  {chartData.openTicketTypeData.length > 0 ? 
+                    `Open Tickets by Type (${chartData.openTicketTypeData.length} types)` : 
+                    'Open tickets type breakdown'
                   }
                 </div>
               )}
@@ -583,6 +648,7 @@ export default function SupportDashboard() {
             </CardContent>
           </Card>
         </div>
+        )}
       </div>
       
       {/* CSV Upload Modal */}
