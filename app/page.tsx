@@ -336,7 +336,18 @@ export default function SupportDashboard() {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-white">Taranto</h1>
+              <img 
+                src="/logo.png" 
+                alt="Taranto Logo" 
+                className="h-8 w-auto"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  const fallback = document.createElement('h1')
+                  fallback.textContent = 'Taranto'
+                  fallback.className = 'text-2xl font-bold text-white'
+                  e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget)
+                }}
+              />
               <span className="text-gray-300">Service Desk Analytics</span>
             </div>
             <div className="flex items-center space-x-4">
