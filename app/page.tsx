@@ -36,6 +36,8 @@ import { cn } from "@/lib/utils"
 import { TicketData, parseCSV } from "@/lib/csv-parser"
 import { DataProcessor, DashboardMetrics, EscalatedTicket, RecentTicket, ChartData } from "@/lib/data-processor"
 import { CSVUpload } from "@/components/csv-upload"
+import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
+import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
 
 
 const statusColors = {
@@ -501,13 +503,7 @@ export default function SupportDashboard() {
                   <div className="animate-pulse bg-gray-200 rounded w-full h-full"></div>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center text-gray-500">
-                  <BarChart3 className="h-8 w-8 mr-2" />
-                  {chartData?.ticketVolumeData?.length > 0 ? 
-                    `Monthly Created vs Resolved Tickets (${chartData.ticketVolumeData.length} months)` : 
-                    'Monthly ticket volume chart'
-                  }
-                </div>
+                <MonthlyTicketsChart data={chartData.ticketVolumeData} />
               )}
             </CardContent>
           </Card>
@@ -522,13 +518,7 @@ export default function SupportDashboard() {
                   <div className="animate-pulse bg-gray-200 rounded w-full h-full"></div>
                 </div>
               ) : (
-                <div className="h-64 flex items-center justify-center text-gray-500">
-                  <PieChart className="h-8 w-8 mr-2" />
-                  {chartData?.openTicketTypeData?.length > 0 ? 
-                    `Open Tickets by Type (${chartData.openTicketTypeData.length} types)` : 
-                    'Open tickets type breakdown'
-                  }
-                </div>
+                <OpenTicketsPieChart data={chartData.openTicketTypeData} />
               )}
             </CardContent>
           </Card>
