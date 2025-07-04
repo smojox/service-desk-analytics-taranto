@@ -154,8 +154,8 @@ export class DataProcessor {
     const resolvedByMonth = new Map<string, number>()
     const openTicketTypes = new Map<string, number>()
 
-    // Process all original tickets for volume chart (ignore current filters for this chart)
-    this.originalTickets.forEach(ticket => {
+    // Process filtered tickets for volume chart (respect SDM/company filters, but show full date range)
+    this.tickets.forEach(ticket => {
       // Created tickets by month
       const createdDate = new Date(ticket.createdTime)
       if (!isNaN(createdDate.getTime()) && (createdDate >= oneYearAgo || useAllData)) {

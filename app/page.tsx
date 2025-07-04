@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import {
   AlertTriangle,
   CheckCircle,
@@ -23,6 +24,7 @@ import {
   Upload,
   BarChart3,
   PieChart,
+  Calendar,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,7 +32,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { TicketData, parseCSV } from "@/lib/csv-parser"
@@ -40,6 +42,7 @@ import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
+import { MonthlyReviewModal } from "@/components/modals/monthly-review-modal"
 import { usePDFExport } from "@/components/pdf-export"
 
 
@@ -57,6 +60,7 @@ const priorityColors = {
 }
 
 export default function SupportDashboard() {
+  const router = useRouter()
   const { exportToPDF } = usePDFExport()
   const [selectedWidget, setSelectedWidget] = useState<string | null>(null)
   const [selectedSDM, setSelectedSDM] = useState<string>("")
@@ -90,6 +94,7 @@ export default function SupportDashboard() {
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all')
   const [showSLAModal, setShowSLAModal] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
+  const [showMonthlyReviewModal, setShowMonthlyReviewModal] = useState(false)
   const [slaOverrides, setSlaOverrides] = useState<{ [ticketId: string]: boolean }>({})
 
   // Don't load CSV data on mount - wait for user upload
@@ -142,6 +147,14 @@ export default function SupportDashboard() {
         { value: 'all', label: 'All Companies' },
         ...uniqueCompanies.map(company => ({ value: company, label: company }))
       ])
+      
+      setFilteredCompanyOptions([
+        { value: 'all', label: 'All Companies' },
+        ...uniqueCompanies.map(company => ({ value: company, label: company }))
+      ])
+      
+      setHasData(true)
+      
       
       setLoading(false)
     } catch (error) {
@@ -243,10 +256,26 @@ export default function SupportDashboard() {
       dateTo: dateFilter.to || undefined
     })
     
+    // For monthly chart, we want to respect SDM/company filters but ignore date filters
+    const monthlyChartProcessor = processor.filterTickets({
+      sdm: selectedSDM || undefined,
+      company: selectedCompany || undefined,
+      // Don't apply date filters to monthly chart
+    })
+    
     setMetrics(filteredProcessor.calculateMetrics())
     setEscalatedTickets(filteredProcessor.getEscalatedTickets())
     setRecentTickets(filteredProcessor.getRecentPriorityTickets())
-    setChartData(filteredProcessor.getChartData())
+    
+    // Get chart data with monthly data from company/SDM filtered processor
+    // and pie chart data from fully filtered processor
+    const monthlyChartData = monthlyChartProcessor.getChartData()
+    const pieChartData = filteredProcessor.getChartData()
+    
+    setChartData({
+      ticketVolumeData: monthlyChartData.ticketVolumeData,
+      openTicketTypeData: pieChartData.openTicketTypeData
+    })
   }
 
   // Get filtered tickets for the modal
@@ -320,6 +349,7 @@ export default function SupportDashboard() {
       // CSV uploaded successfully
       setLoading(false)
       setHasData(true)
+      
       
       console.log('CSV upload completed successfully')
     } catch (error) {
@@ -489,6 +519,7 @@ export default function SupportDashboard() {
                   setSelectedSDM('all')
                   setSelectedCompany('all')
                   setSelectedDateFilter('all')
+                  // Clear data state
                 }}
               >
                 <Upload className="h-4 w-4" />
@@ -512,6 +543,16 @@ export default function SupportDashboard() {
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 <span className="ml-1 text-xs">Excel</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:text-white hover:bg-white/20"
+                title="Monthly Review"
+                onClick={() => setShowMonthlyReviewModal(true)}
+              >
+                <Calendar className="h-4 w-4" />
+                <span className="ml-1 text-xs">Review</span>
               </Button>
               <Button
                 variant="ghost"
@@ -788,6 +829,15 @@ export default function SupportDashboard() {
           selectedSDM={selectedSDM}
           selectedCompany={selectedCompany}
           selectedDateFilter={selectedDateFilter}
+        />
+      )}
+      
+      {/* Monthly Review Modal */}
+      {showMonthlyReviewModal && (
+        <MonthlyReviewModal
+          isOpen={showMonthlyReviewModal}
+          onClose={() => setShowMonthlyReviewModal(false)}
+          tickets={tickets}
         />
       )}
     </div>
