@@ -1,49 +1,233 @@
-# Service Desk Analytics Taranto
+# 📊 Service Desk Analytics Dashboard v1.0
 
-A comprehensive service desk analytics dashboard with real-time ticket monitoring, SLA tracking, and CSV data integration.
+[![Release](https://img.shields.io/badge/release-v1.0-blue.svg)](https://github.com/smojox/service-desk-analytics-taranto/releases/tag/v1.0)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.0-38B2AC.svg)](https://tailwindcss.com/)
 
-## Features
+A comprehensive service desk analytics dashboard built for Taranto, providing powerful insights into ticket performance, SLA compliance, and team efficiency. Perfect for service desk managers, IT directors, and stakeholders who need clear visibility into support operations.
 
-- 📊 **Real-time Metrics**: Total tickets, open/closed counts, average resolution time, SLA compliance
-- 🚨 **Escalated Tickets**: Priority-based filtering and tracking with visual indicators
-- 📈 **Dynamic Charts**: Ticket volume trends and type breakdown visualizations
-- 🔍 **Advanced Filtering**: Filter by SDM, Company, date ranges with dynamic dropdowns
-- 📁 **CSV Integration**: Drag-and-drop CSV upload with automatic data processing
-- 🎨 **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui components
+## 🎯 Key Features
 
-## Getting Started
+### 📈 **Real-time Analytics Dashboard**
+- **Live Metrics**: Total tickets, open/closed counts, average resolution time, SLA compliance
+- **Interactive Charts**: Monthly ticket volume trends with 7-month historical view
+- **Visual KPIs**: Color-coded metrics with trend indicators and hover details
+- **Performance Tracking**: Real-time updates as data changes
+
+### 🎪 **SDM Monthly Reviews**
+- **Modal-based Interface**: Streamlined review process without losing dashboard context
+- **Company Analysis**: Detailed performance breakdown by company
+- **SLA Trending**: Month-over-month SLA comparisons with visual indicators
+- **RAG Status Management**: Red/Amber/Green classifications with comment tracking
+- **Ticket Type Breakdown**: Individual counts for Incidents, Service Requests, Problems, and Others
+
+### 🔍 **Advanced Filtering & Search**
+- **Multi-dimensional Filtering**: Filter by SDM, Company, and custom date ranges
+- **Smart Dropdowns**: Dynamic company filtering based on SDM selection
+- **Contextual Charts**: Monthly charts respect SDM/company filters while preserving historical context
+- **Clear Filters**: Easy reset functionality for quick data exploration
+
+### 📊 **Professional Exports**
+- **PDF Service Reviews**: Comprehensive reports with charts, metrics, and professional formatting
+- **Excel Data Export**: Detailed monthly review data for further analysis
+- **Print-ready Reports**: Formatted for stakeholder presentations and archival
+
+### 🤖 **AI-Powered Insights**
+- **Pattern Recognition**: Intelligent analysis of ticket trends and anomalies
+- **Performance Recommendations**: AI-generated suggestions for process improvement
+- **Predictive Analytics**: Forecasting based on historical data patterns
+- **Executive Summaries**: High-level insights for management reporting
+
+### ⚡ **Performance & User Experience**
+- **Lag-free Text Entry**: Optimized comment handling for smooth typing experience
+- **Responsive Design**: Works seamlessly on desktop, tablet, and mobile devices
+- **Fast Data Processing**: Efficient CSV parsing and real-time calculations
+- **Auto-save Functionality**: Automatic persistence of review data and comments
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn package manager
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/smojox/service-desk-analytics-taranto.git
+cd service-desk-analytics-taranto
+
 # Install dependencies
 npm install --legacy-peer-deps
 
 # Start development server
 npm run dev
 
-# Build for production
-npm run build
+# Open browser to http://localhost:3000
 ```
 
-## Project Structure
+### Production Build
 
-- `app/` - Next.js app directory with pages and layouts
-- `components/` - Reusable UI components and CSV upload functionality
-- `lib/` - Data processing utilities and CSV parser
-- `public/` - Static assets including sample data
-- `instructions/` - Field mapping and configuration documentation
+```bash
+# Build for production
+npm run build
 
-## Data Format
+# Start production server
+npm start
+```
 
-The application expects CSV files with service desk ticket data including:
-- Ticket details (ID, Subject, Status, Priority, Type)
-- Timing data (Created, Resolved, SLA compliance)
-- Assignment data (Agent, SDM, Company)
-- Customer information and impact metrics
+## 📋 Getting Started Guide
 
-## Technology Stack
+### 1. **Upload Your Data**
+- Click the CSV upload area on the welcome screen
+- Select your service desk export file
+- Data is automatically parsed and validated
 
-- **Framework**: Next.js 15 with TypeScript
+### 2. **Explore the Dashboard** 
+- Use the filter bar to focus on specific SDMs, companies, or time periods
+- Click on metric cards for detailed breakdowns
+- Hover over charts for interactive data points
+
+### 3. **Generate Monthly Reviews**
+- Click the "Review" button in the header
+- Select the month and SDM for analysis
+- Review company performance and add comments
+- Assign RAG status and export reports
+
+### 4. **Export Reports**
+- Use PDF export for comprehensive service reviews
+- Excel export for detailed data analysis
+- Share professional reports with stakeholders
+
+## 📊 Data Requirements
+
+The dashboard expects CSV files with the following key fields:
+
+### Required Fields
+- **ticketId**: Unique ticket identifier
+- **subject**: Ticket summary/title
+- **status**: Current ticket status (Open, Resolved, Closed, etc.)
+- **priority**: Ticket priority level
+- **createdTime**: Ticket creation timestamp
+- **companyName**: Customer company name
+- **sdm**: Service Desk Manager assignment
+
+### SLA & Performance Fields
+- **resolutionStatus**: SLA compliance status ('Within SLA', 'SLA Violated')
+- **resolutionTimeHrs**: Time to resolution in hours
+- **dueByTime**: SLA due date/time
+
+### Additional Fields
+- **type**: Ticket type (Incident, Service Request, Problem, etc.)
+- **agent**: Assigned agent/technician
+- **group**: Support group assignment
+
+> 📁 **Sample Data**: Check `/public/testfiles/` for example CSV format
+
+## 🏗️ Project Structure
+
+```
+service-desk-analytics-taranto/
+├── app/                    # Next.js app directory
+│   ├── page.tsx           # Main dashboard
+│   └── monthly-review/    # Review page (legacy)
+├── components/            # React components
+│   ├── ui/               # Base UI components
+│   ├── charts/           # Chart components
+│   ├── modals/           # Modal dialogs
+│   └── csv-upload.tsx    # CSV upload handler
+├── lib/                  # Core utilities
+│   ├── csv-parser.ts     # Data parsing logic
+│   ├── data-processor.ts # Analytics engine
+│   └── utils.ts          # Shared utilities
+├── docs/                 # Documentation
+│   ├── screenshots/      # UI screenshots
+│   └── user-guides/      # User documentation
+└── public/               # Static assets
+    ├── testfiles/        # Sample data
+    └── logo.png          # Branding assets
+```
+
+## 🛠️ Technology Stack
+
+- **Frontend**: Next.js 15 + TypeScript + React 18
 - **Styling**: Tailwind CSS + shadcn/ui components
-- **Data Processing**: Custom CSV parser and analytics engine
-- **Charts**: Recharts integration ready
-- **State Management**: React hooks with real-time updates
+- **Charts**: Recharts for interactive visualizations
+- **Data Processing**: Custom analytics engine with TypeScript
+- **State Management**: React hooks with optimized performance
+- **PDF Generation**: Custom PDF export functionality
+- **Development**: ESLint + Prettier + TypeScript strict mode
+
+## 📈 SLA Calculation Logic
+
+The dashboard uses a comprehensive SLA calculation that handles:
+
+- **Explicit Status**: 'Within SLA' and 'SLA Violated' values
+- **Due Date Checking**: Automatic calculation based on `dueByTime` field
+- **Status Consideration**: Pending tickets assumed compliant
+- **Override Support**: Manual SLA adjustments through the UI
+- **Historical Accuracy**: Consistent calculations across dashboard and reviews
+
+## 🎨 UI Components
+
+Built with modern, accessible components:
+
+- **Responsive Layout**: Mobile-first design with Tailwind CSS
+- **Interactive Charts**: Hover states and clickable elements
+- **Modal Dialogs**: Overlay interfaces that preserve context
+- **Form Controls**: Accessible dropdowns, inputs, and buttons
+- **Loading States**: Smooth loading indicators and skeleton screens
+- **Toast Notifications**: User feedback for actions and errors
+
+## 🔧 Configuration
+
+### Environment Variables
+```bash
+# Optional: Customize application behavior
+NEXT_PUBLIC_APP_NAME="Service Desk Analytics"
+NEXT_PUBLIC_COMPANY_NAME="Taranto"
+```
+
+### CSV Field Mapping
+The application automatically maps common CSV field variations. See `/docs/field-mapping.md` for customization options.
+
+## 📚 Documentation
+
+- **User Guide**: `/docs/USER_MANUAL.md`
+- **Screenshots**: `/docs/screenshots/`
+- **API Reference**: `/docs/api/`
+- **Development Guide**: `/docs/development.md`
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our contributing guidelines:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Issues**: [GitHub Issues](https://github.com/smojox/service-desk-analytics-taranto/issues)
+- **Documentation**: [User Manual](/docs/USER_MANUAL.md)
+- **Email**: Contact your system administrator
+
+## 🏆 Acknowledgments
+
+- Built with [Next.js](https://nextjs.org/) and [Tailwind CSS](https://tailwindcss.com/)
+- UI components from [shadcn/ui](https://ui.shadcn.com/)
+- Charts powered by [Recharts](https://recharts.org/)
+- Icons from [Lucide React](https://lucide.dev/)
+
+---
+
+**🤖 Generated with [Claude Code](https://claude.ai/code)**
+
+**v1.0 Release** - January 2025 | Built for Taranto Service Desk Analytics
