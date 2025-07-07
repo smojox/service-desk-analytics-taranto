@@ -31,6 +31,7 @@ export interface RecentTicket {
 export interface ChartData {
   ticketVolumeData: Array<{ month: string; created: number; resolved: number }>
   openTicketTypeData: Array<{ type: string; count: number }>
+  ageBreakdownData: Array<{ month: string; incidents: number; serviceRequests: number; problems: number; other: number }>
 }
 
 export class DataProcessor {
@@ -211,9 +212,14 @@ export class DataProcessor {
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count)
 
+    // Calculate age breakdown data for open tickets by type and month
+    // Use all-time data filtered only by SDM/company (not date filters)
+    const ageBreakdownData = this.calculateAgeBreakdownData()
+
     return {
       ticketVolumeData,
-      openTicketTypeData
+      openTicketTypeData,
+      ageBreakdownData
     }
   }
 
@@ -280,5 +286,74 @@ export class DataProcessor {
 
   getTickets(): TicketData[] {
     return this.tickets
+  }
+
+  private calculateAgeBreakdownData(): Array<{ month: string; incidents: number; serviceRequests: number; problems: number; other: number }> {
+    const ageBreakdownByMonth = new Map<string, { incidents: number; serviceRequests: number; problems: number; other: number }>()
+    
+    // Use original tickets for age breakdown, filtered only by SDM/company (no date filters)
+    // Find the SDM and company from current filtered tickets to apply same filters
+    const currentSDMs = new Set(this.tickets.map(t => t.sdm).filter(Boolean))
+    const currentCompanies = new Set(this.tickets.map(t => t.companyName).filter(Boolean))
+    
+    // If we have specific SDM/company filters, apply them to original tickets
+    const sdmFilter = currentSDMs.size === 1 ? Array.from(currentSDMs)[0] : null
+    const companyFilter = currentCompanies.size === 1 ? Array.from(currentCompanies)[0] : null
+    
+    let ticketsToProcess = this.originalTickets
+    
+    // Apply SDM filter if we have one specific SDM
+    if (sdmFilter && this.originalTickets.some(t => t.sdm !== sdmFilter)) {
+      ticketsToProcess = ticketsToProcess.filter(ticket => ticket.sdm === sdmFilter)
+    }
+    
+    // Apply company filter if we have one specific company
+    if (companyFilter && this.originalTickets.some(t => t.companyName !== companyFilter)) {
+      ticketsToProcess = ticketsToProcess.filter(ticket => ticket.companyName === companyFilter)
+    }
+    
+    // Process open tickets to calculate age breakdown by creation month
+    ticketsToProcess
+      .filter(ticket => ticket.status !== 'Resolved' && ticket.status !== 'Closed')
+      .forEach(ticket => {
+        const createdDate = new Date(ticket.createdTime)
+        if (!isNaN(createdDate.getTime())) {
+          const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`
+          
+          if (!ageBreakdownByMonth.has(monthKey)) {
+            ageBreakdownByMonth.set(monthKey, { incidents: 0, serviceRequests: 0, problems: 0, other: 0 })
+          }
+          
+          const breakdown = ageBreakdownByMonth.get(monthKey)!
+          const type = ticket.type || 'Unknown'
+          
+          switch (type) {
+            case 'Incident':
+              breakdown.incidents++
+              break
+            case 'Service Request':
+              breakdown.serviceRequests++
+              break
+            case 'Problem':
+              breakdown.problems++
+              break
+            default:
+              breakdown.other++
+              break
+          }
+        }
+      })
+
+    // Get all months that have data, sorted chronologically
+    const allMonths = Array.from(ageBreakdownByMonth.keys()).sort()
+    
+    // Return data for all months with data (dynamic expansion)
+    return allMonths.map(month => ({
+      month,
+      incidents: ageBreakdownByMonth.get(month)?.incidents || 0,
+      serviceRequests: ageBreakdownByMonth.get(month)?.serviceRequests || 0,
+      problems: ageBreakdownByMonth.get(month)?.problems || 0,
+      other: ageBreakdownByMonth.get(month)?.other || 0
+    }))
   }
 }

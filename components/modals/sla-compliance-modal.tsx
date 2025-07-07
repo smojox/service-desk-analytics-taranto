@@ -5,8 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { X, FileSpreadsheet, User, AlertTriangle, CheckCircle, Clock, ToggleLeft, ToggleRight } from 'lucide-react'
+import { X, FileSpreadsheet, User, AlertTriangle, CheckCircle, Clock, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
 import { TicketData } from '@/lib/csv-parser'
+import { freshdeskClient } from '@/lib/freshdesk-client'
+import { toast } from 'sonner'
 
 interface SLAComplianceModalProps {
   isOpen: boolean
@@ -14,6 +16,7 @@ interface SLAComplianceModalProps {
   tickets: TicketData[]
   compliancePercentage: number
   selectedCompany?: string
+  currentSLAOverrides?: { [ticketId: string]: boolean }
   onSLAOverrideChange?: (overrides: { [ticketId: string]: boolean }) => void
 }
 
@@ -38,9 +41,17 @@ interface AgentBreachSummary {
   breachPercentage: number
 }
 
-export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage, selectedCompany, onSLAOverrideChange }: SLAComplianceModalProps) {
+export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercentage, selectedCompany, currentSLAOverrides, onSLAOverrideChange }: SLAComplianceModalProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [slaOverrides, setSlaOverrides] = useState<{ [ticketId: string]: boolean }>({})
+  const [loadingTickets, setLoadingTickets] = useState<Set<string>>(new Set())
+  
+  // Initialize and sync with parent SLA overrides
+  useEffect(() => {
+    if (currentSLAOverrides) {
+      setSlaOverrides(currentSLAOverrides)
+    }
+  }, [currentSLAOverrides])
   
   // Calculate SLA data for tickets (tickets are already filtered by the parent component)
   const slaTickets: SLATicket[] = tickets.map(ticket => {
@@ -133,18 +144,66 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
   // Sort agents by breach count (highest first)
   agentBreachSummaries.sort((a, b) => b.breachedCount - a.breachedCount)
 
+
   // Handle SLA status toggle
-  const toggleSLAStatus = (ticketId: string, currentStatus: boolean) => {
-    const newOverrides = {
-      ...slaOverrides,
-      [ticketId]: !currentStatus
-    }
-    setSlaOverrides(newOverrides)
+  const toggleSLAStatus = async (ticketId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus
+    const slaStatus = newStatus ? 'SLA Violated' : 'Within SLA'
     
-    // Notify parent component of the change
-    if (onSLAOverrideChange) {
-      onSLAOverrideChange(newOverrides)
+    console.log(`Toggle SLA for ticket ${ticketId}: ${currentStatus ? 'Breached' : 'Within SLA'} → ${slaStatus} ${slaStatus === 'Within SLA' ? '(Override: Manual review - Within SLA)' : '(Override: Cleared - Follow normal calculation)'}`)
+    
+    // Add to loading state
+    setLoadingTickets(prev => new Set(prev).add(ticketId))
+    
+    try {
+      // Update local state first for immediate UI feedback
+      const newOverrides = {
+        ...slaOverrides,
+        [ticketId]: newStatus
+      }
+      setSlaOverrides(newOverrides)
+      
+      // Notify parent component of the change
+      if (onSLAOverrideChange) {
+        onSLAOverrideChange(newOverrides)
+      }
+      
+      // Update Freshdesk via API route
+      const response = await freshdeskClient.updateSLAStatus(ticketId, slaStatus)
+      
+      if (response.error) {
+        // Revert local state if API call failed
+        setSlaOverrides(slaOverrides)
+        if (onSLAOverrideChange) {
+          onSLAOverrideChange(slaOverrides)
+        }
+        toast.error(`Failed to update SLA status in Freshdesk: ${response.error}`)
+      } else {
+        toast.success(slaStatus === 'Within SLA' 
+          ? `Ticket marked as Within SLA (override applied) in Freshdesk` 
+          : `Override cleared - ticket follows normal SLA calculation in Freshdesk`)
+      }
+    } catch (error) {
+      // Revert local state if something went wrong
+      setSlaOverrides(slaOverrides)
+      if (onSLAOverrideChange) {
+        onSLAOverrideChange(slaOverrides)
+      }
+      toast.error(`Failed to update SLA status: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      // Remove from loading state
+      setLoadingTickets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(ticketId)
+        return newSet
+      })
     }
+  }
+
+  const handleTicketClick = (ticketId: string) => {
+    const domain = process.env.NEXT_PUBLIC_FRESHDESK_DOMAIN || 'wsp'
+    const freshdeskUrl = `https://${domain}.freshdesk.com/a/tickets/${ticketId}`
+    window.open(freshdeskUrl, '_blank')
   }
 
   // Calculate updated compliance percentage with overrides
@@ -313,7 +372,12 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-2">
-                            <span className="font-medium text-gray-900">{ticket.ticketId}</span>
+                            <span 
+                              className="font-medium text-gray-900 cursor-pointer text-blue-600 hover:text-blue-800 underline" 
+                              onClick={() => handleTicketClick(ticket.ticketId)}
+                            >
+                              {ticket.ticketId}
+                            </span>
                             <Badge className={`${
                               ticket.priority === 'Urgent' ? 'bg-red-100 text-red-800' :
                               ticket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
@@ -350,8 +414,11 @@ export function SLAComplianceModal({ isOpen, onClose, tickets, compliancePercent
                               className="p-1 h-8 w-8"
                               onClick={() => toggleSLAStatus(ticket.ticketId, ticket.isBreached)}
                               title={`Toggle to ${ticket.isBreached ? 'Within SLA' : 'Breached'}`}
+                              disabled={loadingTickets.has(ticket.ticketId)}
                             >
-                              {ticket.isBreached ? (
+                              {loadingTickets.has(ticket.ticketId) ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : ticket.isBreached ? (
                                 <ToggleLeft className="h-5 w-5 text-red-600" />
                               ) : (
                                 <ToggleRight className="h-5 w-5 text-green-600" />

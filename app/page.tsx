@@ -40,9 +40,11 @@ import { DataProcessor, DashboardMetrics, EscalatedTicket, RecentTicket, ChartDa
 import { CSVUpload } from "@/components/csv-upload"
 import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
+import { TicketAgeBreakdownChart } from "@/components/charts/ticket-age-breakdown-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
 import { MonthlyReviewModal } from "@/components/modals/monthly-review-modal"
+import { ExecutiveSummaryModal } from "@/components/modals/executive-summary-modal"
 import { usePDFExport } from "@/components/pdf-export"
 
 
@@ -84,7 +86,8 @@ export default function SupportDashboard() {
   const [recentTickets, setRecentTickets] = useState<RecentTicket[]>([])
   const [chartData, setChartData] = useState<ChartData>({
     ticketVolumeData: [],
-    openTicketTypeData: []
+    openTicketTypeData: [],
+    ageBreakdownData: []
   })
   const [sdmOptions, setSdmOptions] = useState<Array<{value: string, label: string}>>([])
   const [companyOptions, setCompanyOptions] = useState<Array<{value: string, label: string}>>([])
@@ -95,6 +98,7 @@ export default function SupportDashboard() {
   const [showSLAModal, setShowSLAModal] = useState(false)
   const [showAIModal, setShowAIModal] = useState(false)
   const [showMonthlyReviewModal, setShowMonthlyReviewModal] = useState(false)
+  const [showExecutiveSummaryModal, setShowExecutiveSummaryModal] = useState(false)
   const [slaOverrides, setSlaOverrides] = useState<{ [ticketId: string]: boolean }>({})
 
   // Don't load CSV data on mount - wait for user upload
@@ -274,7 +278,8 @@ export default function SupportDashboard() {
     
     setChartData({
       ticketVolumeData: monthlyChartData.ticketVolumeData,
-      openTicketTypeData: pieChartData.openTicketTypeData
+      openTicketTypeData: pieChartData.openTicketTypeData,
+      ageBreakdownData: pieChartData.ageBreakdownData
     })
   }
 
@@ -297,6 +302,11 @@ export default function SupportDashboard() {
 
   // Handle PDF export
   const handlePDFExport = async () => {
+    setShowExecutiveSummaryModal(true)
+  }
+
+  // Handle PDF export with executive summary
+  const handlePDFExportWithSummary = async (executiveSummary: string) => {
     try {
       await exportToPDF({
         tickets: getFilteredTickets(), // For metrics and other filtered data
@@ -305,7 +315,8 @@ export default function SupportDashboard() {
         chartData,
         selectedSDM: selectedSDM === 'all' ? undefined : selectedSDM,
         selectedCompany: selectedCompany === 'all' ? undefined : selectedCompany,
-        selectedDateFilter
+        selectedDateFilter,
+        executiveSummary
       })
     } catch (error) {
       console.error('Error generating PDF:', error)
@@ -357,6 +368,12 @@ export default function SupportDashboard() {
       setLoading(false)
       // You could show an error message to the user here
     }
+  }
+
+  const handleTicketClick = (ticketId: string) => {
+    const domain = process.env.NEXT_PUBLIC_FRESHDESK_DOMAIN || 'wsp'
+    const freshdeskUrl = `https://${domain}.freshdesk.com/a/tickets/${ticketId}`
+    window.open(freshdeskUrl, '_blank')
   }
 
   const MetricCard = ({
@@ -676,6 +693,22 @@ export default function SupportDashboard() {
           </Card>
         </div>
 
+        {/* Age Breakdown Chart */}
+        <Card className="border-0 bg-white/80 backdrop-blur-sm mb-6">
+          <CardHeader>
+            <CardTitle className="text-gray-900">Breakdown by Age of Ticket</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="h-64 flex items-center justify-center">
+                <div className="animate-pulse bg-gray-200 rounded w-full h-full"></div>
+              </div>
+            ) : (
+              <TicketAgeBreakdownChart data={chartData.ageBreakdownData} />
+            )}
+          </CardContent>
+        </Card>
+
         {/* Escalated Tickets Section */}
         <Card className="border-0 bg-white/80 backdrop-blur-sm mb-6">
           <CardHeader>
@@ -719,7 +752,12 @@ export default function SupportDashboard() {
                           <div>
                             <h4 className="font-medium text-gray-900">{ticket.subject}</h4>
                             <p className="text-sm text-gray-600">
-                              {ticket.ticketId} • {ticket.companyName} • {new Date(ticket.createdTime).toLocaleDateString()}
+                              <span 
+                                className="cursor-pointer text-blue-600 hover:text-blue-800 underline" 
+                                onClick={() => handleTicketClick(ticket.ticketId)}
+                              >
+                                {ticket.ticketId}
+                              </span> • {ticket.companyName} • {new Date(ticket.createdTime).toLocaleDateString()}
                             </p>
                           </div>
                         </div>
@@ -782,7 +820,12 @@ export default function SupportDashboard() {
                             <div>
                               <h4 className="font-medium text-gray-900">{ticket.subject}</h4>
                               <p className="text-sm text-gray-600">
-                                {ticket.ticketId} • {new Date(ticket.createdTime).toLocaleDateString()} • {ticket.agent}
+                                <span 
+                                  className="cursor-pointer text-blue-600 hover:text-blue-800 underline" 
+                                  onClick={() => handleTicketClick(ticket.ticketId)}
+                                >
+                                  {ticket.ticketId}
+                                </span> • {new Date(ticket.createdTime).toLocaleDateString()} • {ticket.agent}
                               </p>
                             </div>
                           </div>
@@ -815,6 +858,7 @@ export default function SupportDashboard() {
           tickets={getFilteredTickets()}
           compliancePercentage={metrics.slaCompliance}
           selectedCompany={selectedCompany}
+          currentSLAOverrides={slaOverrides}
           onSLAOverrideChange={handleSLAOverrideChange}
         />
       )}
@@ -840,6 +884,20 @@ export default function SupportDashboard() {
           tickets={tickets}
         />
       )}
+      
+      {/* Executive Summary Modal */}
+      {showExecutiveSummaryModal && (
+        <ExecutiveSummaryModal
+          isOpen={showExecutiveSummaryModal}
+          onClose={() => setShowExecutiveSummaryModal(false)}
+          onConfirm={handlePDFExportWithSummary}
+          metrics={metrics}
+          selectedCompany={selectedCompany}
+          selectedSDM={selectedSDM}
+          selectedDateFilter={selectedDateFilter}
+        />
+      )}
+      
     </div>
   )
 }

@@ -1,0 +1,197 @@
+"use client"
+
+import React, { useState, useEffect } from 'react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Loader2, FileText, Download, Sparkles } from 'lucide-react'
+import { DashboardMetrics } from '@/lib/data-processor'
+
+interface ExecutiveSummaryModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: (summary: string) => void
+  metrics: DashboardMetrics
+  selectedCompany?: string
+  selectedSDM?: string
+  selectedDateFilter?: string
+}
+
+export function ExecutiveSummaryModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  metrics,
+  selectedCompany,
+  selectedSDM,
+  selectedDateFilter
+}: ExecutiveSummaryModalProps) {
+  const [summary, setSummary] = useState<string>('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [hasGenerated, setHasGenerated] = useState(false)
+
+  // Generate AI summary when modal opens
+  useEffect(() => {
+    if (isOpen && !hasGenerated) {
+      generateAISummary()
+    }
+  }, [isOpen])
+
+  const generateAISummary = async () => {
+    setIsGenerating(true)
+    
+    try {
+      // Create a professional summary based on the metrics
+      const companyText = selectedCompany && selectedCompany !== 'all' ? selectedCompany : 'all managed services'
+      const sdmText = selectedSDM && selectedSDM !== 'all' ? `under ${selectedSDM}'s management` : ''
+      const periodText = getDateFilterLabel(selectedDateFilter)
+      
+      const slaStatus = metrics.slaCompliance >= 95 ? 'exceptional' : 
+                       metrics.slaCompliance >= 90 ? 'strong' : 
+                       metrics.slaCompliance >= 80 ? 'satisfactory' : 'requires attention'
+      
+      const avgResolutionText = metrics.avgResolution <= 2 ? 'excellent' :
+                               metrics.avgResolution <= 8 ? 'good' :
+                               metrics.avgResolution <= 24 ? 'acceptable' : 'needs improvement'
+      
+      const generatedSummary = `Executive Summary - Service Analytics Review
+
+We are pleased to present this comprehensive service analytics review covering ${companyText} ${sdmText} for the period of ${periodText}. This report provides key insights into our service delivery performance and operational metrics.
+
+Key Performance Highlights:
+
+• Service Level Agreement (SLA) compliance achieved ${metrics.slaCompliance}% - demonstrating ${slaStatus} performance standards
+
+• Managed a total of ${metrics.totalTickets} service requests and incidents during this period
+
+• Currently maintaining ${metrics.openTickets} active tickets requiring attention
+
+• Successfully resolved ${metrics.closedTickets} tickets, reflecting our commitment to customer satisfaction
+
+• Average resolution time of ${metrics.avgResolution} hours indicates ${avgResolutionText} operational efficiency
+
+Operational Excellence:
+
+Our team continues to maintain high standards of service delivery while adapting to evolving business requirements. The metrics presented demonstrate our proactive approach to service management and continuous improvement initiatives.
+
+Focus Areas:
+
+We remain committed to enhancing our service delivery capabilities through strategic improvements in process optimization, resource allocation, and customer communication. This report serves as a foundation for discussing future service enhancements and alignment with business objectives.
+
+Looking Forward:
+
+We appreciate the opportunity to review these metrics with you and discuss how our services continue to support your business goals. We welcome any questions or discussions regarding the data presented in this comprehensive review.`
+
+      setSummary(generatedSummary)
+      setHasGenerated(true)
+    } catch (error) {
+      console.error('Error generating summary:', error)
+      // Provide a fallback summary
+      setSummary(`Executive Summary - Service Analytics Review
+
+This report provides a comprehensive overview of our service delivery performance for the selected period.
+
+Key Metrics:
+• Total Tickets: ${metrics.totalTickets}
+• Open Tickets: ${metrics.openTickets}
+• Closed Tickets: ${metrics.closedTickets}
+• SLA Compliance: ${metrics.slaCompliance}%
+• Average Resolution Time: ${metrics.avgResolution} hours
+
+We look forward to discussing these results and our continued partnership.`)
+      setHasGenerated(true)
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleConfirm = () => {
+    onConfirm(summary)
+    onClose()
+  }
+
+  const handleSkip = () => {
+    onConfirm('')
+    onClose()
+  }
+
+  const getDateFilterLabel = (dateFilter?: string): string => {
+    switch (dateFilter) {
+      case 'last3months': return 'the last 3 months'
+      case 'last6months': return 'the last 6 months'
+      case 'lastyear': return 'the last 12 months'
+      case 'all': return 'all available periods'
+      default:
+        if (dateFilter?.includes('-')) {
+          const [year, month] = dateFilter.split('-')
+          const date = new Date(parseInt(year), parseInt(month) - 1, 1)
+          return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+        }
+        return 'the selected period'
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center">
+            <FileText className="h-5 w-5 text-blue-600 mr-2" />
+            Executive Summary for PDF Export
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center text-sm">
+                <Sparkles className="h-4 w-4 text-purple-600 mr-2" />
+                AI-Generated Professional Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                We've generated a professional executive summary based on your current metrics. 
+                You can customize this content before including it in your PDF export.
+              </p>
+              
+              {isGenerating ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                  <span className="ml-2 text-gray-600">Generating professional summary...</span>
+                </div>
+              ) : (
+                <Textarea
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  className="min-h-[400px] text-sm"
+                  placeholder="Executive summary will appear here..."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={handleSkip}>
+              Skip Summary - Export Without
+            </Button>
+            <div className="flex space-x-2">
+              <Button variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleConfirm}
+                disabled={isGenerating || !summary.trim()}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF with Summary
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

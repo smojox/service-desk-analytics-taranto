@@ -12,6 +12,7 @@ interface PDFExportProps {
   selectedSDM?: string
   selectedCompany?: string
   selectedDateFilter?: string
+  executiveSummary?: string
 }
 
 export class ClientServiceReportGenerator {
@@ -24,7 +25,7 @@ export class ClientServiceReportGenerator {
   }
 
   async generateReport(data: PDFExportProps): Promise<void> {
-    const { metrics, tickets, allTickets, chartData, selectedSDM, selectedCompany, selectedDateFilter } = data
+    const { metrics, tickets, allTickets, chartData, selectedSDM, selectedCompany, selectedDateFilter, executiveSummary } = data
     
     try {
       // Load template PDF
@@ -35,7 +36,13 @@ export class ClientServiceReportGenerator {
       
       // Copy and modify specific pages from template
       await this.createTitlePageWithTemplate(selectedCompany, selectedDateFilter, selectedSDM)
-      await this.createAgendaPageWithTemplate()
+      await this.createAgendaPageWithTemplate(executiveSummary) // Pass executiveSummary to include it in agenda
+      
+      // Add executive summary page if provided
+      if (executiveSummary && executiveSummary.trim()) {
+        await this.createExecutiveSummaryPageWithTemplate(executiveSummary)
+      }
+      
       await this.createServiceReportPageWithTemplate(metrics, tickets, chartData)
       await this.createSLADetailPageWithTemplate(metrics, tickets)
       
@@ -110,7 +117,8 @@ export class ClientServiceReportGenerator {
     const { width, height } = page.getSize()
     
     // Adjust positioning: move right and down, make white and 20% bigger than 50% smaller (so 40% smaller overall)
-    const rightOffset = width * 0.65 // Move to right side
+    // Move 2cm (57 points) to the left from the original position
+    const rightOffset = width * 0.65 - 57 // Move to right side, then 2cm left
     const downOffset = height * 0.48 // Move down 20% more (was 0.6, now 0.48 = 60% - 20% of 60%)
     
     // Client name (positioned to the right and down, white, 20% bigger than previous)
@@ -161,7 +169,7 @@ export class ClientServiceReportGenerator {
     })
   }
 
-  private async createAgendaPageWithTemplate(): Promise<void> {
+  private async createAgendaPageWithTemplate(executiveSummary?: string): Promise<void> {
     // Use Page 2 (index 1) of template
     const page = await this.copyTemplatePageWithOverlay(1)
     const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
@@ -169,14 +177,22 @@ export class ClientServiceReportGenerator {
     const { height } = page.getSize()
     
     // Add agenda items (reflect actual page headings)
-    const agendaItems = [
+    const agendaItems = []
+    
+    // Add Executive Summary if provided
+    if (executiveSummary && executiveSummary.trim()) {
+      agendaItems.push('Executive Summary')
+    }
+    
+    // Add remaining agenda items
+    agendaItems.push(
       'Key Performance Metrics',
       'SLA Compliance Analysis', 
       'Escalated Tickets Analysis',
       'Monthly Created vs Resolved Tickets',
       'Open Tickets by Type',
       'Questions & Discussion'
-    ]
+    )
     
     const startY = height - 206 // Move down 2cm more (was 150, now 206 = 150 + 56 points)
     const itemHeight = 25
@@ -191,6 +207,167 @@ export class ClientServiceReportGenerator {
         color: rgb(0.2, 0.2, 0.2),
       })
     })
+  }
+
+  private async createExecutiveSummaryPageWithTemplate(executiveSummary: string): Promise<void> {
+    // Use Page 3 (index 2) of template - the blank canvas
+    const page = await this.copyTemplatePageWithOverlay(2)
+    const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+    const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
+    
+    const { width, height } = page.getSize()
+    const tealColor = rgb(0.06, 0.46, 0.43)
+    const textColor = rgb(0.2, 0.2, 0.2)
+    
+    // Page title
+    page.drawText('Executive Summary', {
+      x: 50,
+      y: height - 60,
+      size: 22,
+      font: boldFont,
+      color: tealColor,
+    })
+    
+    // Better page layout parameters
+    const leftMargin = 50
+    const rightMargin = width - 50
+    const maxLineWidth = rightMargin - leftMargin
+    const normalLineHeight = 16 // Increased to match working text spacing
+    const headerLineHeight = 20
+    const paragraphSpacing = 10
+    const sectionSpacing = 15
+    const bottomMargin = 60
+    
+    let currentY = height - 95
+    
+    // Split the summary into paragraphs and further split bullet points
+    let paragraphs = executiveSummary.split('\n\n').filter(p => p.trim().length > 0)
+    
+    // Further split paragraphs that contain bullet points into individual lines
+    const expandedParagraphs: string[] = []
+    for (const paragraph of paragraphs) {
+      if (paragraph.includes('•')) {
+        // Split on bullet points and process each separately
+        const lines = paragraph.split('\n').filter(line => line.trim().length > 0)
+        for (const line of lines) {
+          expandedParagraphs.push(line.trim())
+        }
+      } else {
+        expandedParagraphs.push(paragraph.trim())
+      }
+    }
+    paragraphs = expandedParagraphs
+    
+    console.log(`Processing ${paragraphs.length} paragraphs for executive summary`)
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+      const paragraph = paragraphs[i].trim()
+      
+      if (currentY < bottomMargin + 20) {
+        console.log(`Stopping at paragraph ${i} due to space constraints`)
+        break
+      }
+      
+      // Skip the main title since we already drew it
+      if (paragraph.includes('Executive Summary - Service Analytics Review')) {
+        console.log(`Skipping main title paragraph`)
+        continue
+      }
+      
+      // Check if this is a standalone section header
+      const headerPatterns = ['Key Performance Highlights:', 'Operational Excellence:', 'Focus Areas:', 'Looking Forward:']
+      const isStandaloneHeader = headerPatterns.some(pattern => paragraph.trim() === pattern)
+      
+      if (isStandaloneHeader) {
+        // Ensure we have space for header and at least one line of content
+        if (currentY < bottomMargin + 40) break
+        
+        // Draw the header
+        const headerText = paragraph.replace(':', '')
+        console.log(`Drawing standalone header: "${headerText}"`)
+        page.drawText(headerText, {
+          x: leftMargin,
+          y: currentY,
+          size: 13,
+          font: boldFont,
+          color: tealColor,
+        })
+        currentY -= headerLineHeight + sectionSpacing
+        continue
+      }
+      
+      // Process all paragraphs as regular text (no special bullet point handling)
+      console.log(`Processing paragraph ${i}: "${paragraph.substring(0, 50)}..."`);
+      const lines = this.wrapTextToLines(paragraph, maxLineWidth, 11)
+      console.log(`Paragraph wrapped into ${lines.length} lines`)
+      
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j]
+        if (currentY < bottomMargin) {
+          console.log(`Stopping at line ${j} due to bottom margin`)
+          break
+        }
+        
+        console.log(`Drawing line ${j}: "${line}" (${line.length} chars)`)
+        page.drawText(line, {
+          x: leftMargin,
+          y: currentY,
+          size: 11,
+          font: font,
+          color: textColor,
+        })
+        currentY -= normalLineHeight
+      }
+      
+      currentY -= paragraphSpacing // Extra space between paragraphs
+    }
+    
+    // Add a note if content was truncated
+    if (currentY < bottomMargin + 20) {
+      page.drawText('...continued in discussion', {
+        x: rightMargin - 120,
+        y: bottomMargin,
+        size: 8,
+        font: font,
+        color: rgb(0.5, 0.5, 0.5),
+      })
+    }
+  }
+
+  private wrapTextToLines(text: string, maxWidth: number, fontSize: number): string[] {
+    const words = text.split(' ')
+    const lines: string[] = []
+    let currentLine = ''
+    
+    // Expanded character limit - doubling from 85 to 170 characters per line
+    // Based on testing, 85 chars worked well, so 170 should still fit comfortably
+    // with 50pt margins on standard PDF page width
+    const maxCharsPerLine = 170 // Doubled from 85 to make better use of page width
+    
+    console.log(`Wrapping text with max ${maxCharsPerLine} chars per line. Text: "${text.substring(0, 100)}..."`)
+    
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i]
+      const testLine = currentLine ? `${currentLine} ${word}` : word
+      
+      // If adding this word would exceed our limit, start a new line
+      if (testLine.length > maxCharsPerLine && currentLine.length > 0) {
+        console.log(`Line break at word ${i}: "${currentLine}" (${currentLine.length} chars)`)
+        lines.push(currentLine.trim())
+        currentLine = word
+      } else {
+        currentLine = testLine
+      }
+    }
+    
+    // Add the last line if there's content
+    if (currentLine.trim().length > 0) {
+      console.log(`Final line: "${currentLine}" (${currentLine.length} chars)`)
+      lines.push(currentLine.trim())
+    }
+    
+    console.log(`Total lines created: ${lines.length}`)
+    return lines
   }
 
   private async createServiceReportPageWithTemplate(metrics: DashboardMetrics, tickets: TicketData[], chartData: ChartData): Promise<void> {
