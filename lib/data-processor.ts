@@ -32,6 +32,7 @@ export interface ChartData {
   ticketVolumeData: Array<{ month: string; created: number; resolved: number }>
   openTicketTypeData: Array<{ type: string; count: number }>
   ageBreakdownData: Array<{ month: string; incidents: number; serviceRequests: number; problems: number; other: number }>
+  statusData: Array<{ status: string; count: number; fill: string }>
 }
 
 export class DataProcessor {
@@ -85,7 +86,10 @@ export class DataProcessor {
     this.tickets.forEach(ticket => {
       let isCompliant = false
       
-      if (ticket.resolutionStatus === 'Within SLA') {
+      // Check CSV "Within SLA Override" field first (highest priority)
+      if (ticket.withinSlaOverride && ticket.withinSlaOverride.toLowerCase() === 'true') {
+        isCompliant = true
+      } else if (ticket.resolutionStatus === 'Within SLA') {
         isCompliant = true
       } else if (ticket.resolutionStatus === 'SLA Violated') {
         isCompliant = false
@@ -101,6 +105,7 @@ export class DataProcessor {
       }
       
       // Apply manual override if exists (true = breached, so invert for compliance)
+      // This overrides CSV field as it's a user action
       if (this.slaOverrides.hasOwnProperty(ticket.ticketId)) {
         isCompliant = !this.slaOverrides[ticket.ticketId]
       }
@@ -174,8 +179,29 @@ export class DataProcessor {
       }
     })
 
-    // Process open tickets for type breakdown (apply current filters)
-    this.tickets
+    // Process open tickets for type breakdown using all-time data with SDM/company filters only
+    // Find the SDM and company from current filtered tickets to apply same filters
+    const currentSDMs = new Set(this.tickets.map(t => t.sdm).filter(Boolean))
+    const currentCompanies = new Set(this.tickets.map(t => t.companyName).filter(Boolean))
+    
+    // If we have specific SDM/company filters, apply them to original tickets
+    const sdmFilter = currentSDMs.size === 1 ? Array.from(currentSDMs)[0] : null
+    const companyFilter = currentCompanies.size === 1 ? Array.from(currentCompanies)[0] : null
+    
+    let ticketsToProcessForTypes = this.originalTickets
+    
+    // Apply SDM filter if we have one specific SDM
+    if (sdmFilter && this.originalTickets.some(t => t.sdm !== sdmFilter)) {
+      ticketsToProcessForTypes = ticketsToProcessForTypes.filter(ticket => ticket.sdm === sdmFilter)
+    }
+    
+    // Apply company filter if we have one specific company
+    if (companyFilter && this.originalTickets.some(t => t.companyName !== companyFilter)) {
+      ticketsToProcessForTypes = ticketsToProcessForTypes.filter(ticket => ticket.companyName === companyFilter)
+    }
+    
+    // Count open tickets by type using all-time filtered data
+    ticketsToProcessForTypes
       .filter(ticket => ticket.status !== 'Resolved' && ticket.status !== 'Closed')
       .forEach(ticket => {
         const type = ticket.type || 'Unknown'
@@ -216,10 +242,14 @@ export class DataProcessor {
     // Use all-time data filtered only by SDM/company (not date filters)
     const ageBreakdownData = this.calculateAgeBreakdownData()
 
+    // Calculate status breakdown data
+    const statusData = this.calculateStatusData()
+
     return {
       ticketVolumeData,
       openTicketTypeData,
-      ageBreakdownData
+      ageBreakdownData,
+      statusData
     }
   }
 
@@ -355,5 +385,59 @@ export class DataProcessor {
       problems: ageBreakdownByMonth.get(month)?.problems || 0,
       other: ageBreakdownByMonth.get(month)?.other || 0
     }))
+  }
+
+  private calculateStatusData(): Array<{ status: string; count: number; fill: string }> {
+    const statusCounts = new Map<string, number>()
+    
+    // Use original tickets for all-time data, filtered only by SDM/company (not date filters)
+    // Find the SDM and company from current filtered tickets to apply same filters
+    const currentSDMs = new Set(this.tickets.map(t => t.sdm).filter(Boolean))
+    const currentCompanies = new Set(this.tickets.map(t => t.companyName).filter(Boolean))
+    
+    // If we have specific SDM/company filters, apply them to original tickets
+    const sdmFilter = currentSDMs.size === 1 ? Array.from(currentSDMs)[0] : null
+    const companyFilter = currentCompanies.size === 1 ? Array.from(currentCompanies)[0] : null
+    
+    let ticketsToProcess = this.originalTickets
+    
+    // Apply SDM filter if we have one specific SDM
+    if (sdmFilter && this.originalTickets.some(t => t.sdm !== sdmFilter)) {
+      ticketsToProcess = ticketsToProcess.filter(ticket => ticket.sdm === sdmFilter)
+    }
+    
+    // Apply company filter if we have one specific company
+    if (companyFilter && this.originalTickets.some(t => t.companyName !== companyFilter)) {
+      ticketsToProcess = ticketsToProcess.filter(ticket => ticket.companyName === companyFilter)
+    }
+    
+    // Count open tickets by status (exclude resolved and closed)
+    ticketsToProcess
+      .filter(ticket => ticket.status !== 'Resolved' && ticket.status !== 'Closed')
+      .forEach(ticket => {
+        const status = ticket.status || 'Unknown'
+        statusCounts.set(status, (statusCounts.get(status) || 0) + 1)
+      })
+
+    // Define colors for different statuses (only open statuses now)
+    const statusColors: { [key: string]: string } = {
+      'Open': '#3b82f6',        // Blue
+      'In Progress': '#f59e0b', // Amber
+      'Pending': '#eab308',     // Yellow
+      'On Hold': '#ef4444',     // Red
+      'Awaiting Customer': '#8b5cf6', // Purple
+      'Escalated': '#dc2626',   // Red-600
+      'Pending - Close': '#a3a3a3', // Gray
+      'Unknown': '#9ca3af'      // Gray-400
+    }
+
+    // Convert to array and sort by count (descending)
+    return Array.from(statusCounts.entries())
+      .map(([status, count]) => ({
+        status,
+        count,
+        fill: statusColors[status] || '#6b7280' // Default to gray if status not found
+      }))
+      .sort((a, b) => b.count - a.count)
   }
 }

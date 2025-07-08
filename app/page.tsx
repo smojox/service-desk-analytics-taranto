@@ -25,6 +25,12 @@ import {
   BarChart3,
   PieChart,
   Calendar,
+  X,
+  ToggleLeft,
+  ToggleRight,
+  Loader2,
+  User,
+  Building2,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -41,11 +47,14 @@ import { CSVUpload } from "@/components/csv-upload"
 import { MonthlyTicketsChart } from "@/components/charts/monthly-tickets-chart"
 import { OpenTicketsPieChart } from "@/components/charts/open-tickets-pie-chart"
 import { TicketAgeBreakdownChart } from "@/components/charts/ticket-age-breakdown-chart"
+import { TicketStatusChart } from "@/components/charts/ticket-status-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
 import { MonthlyReviewModal } from "@/components/modals/monthly-review-modal"
 import { ExecutiveSummaryModal } from "@/components/modals/executive-summary-modal"
 import { usePDFExport } from "@/components/pdf-export"
+import { freshdeskClient } from "@/lib/freshdesk-client"
+import { toast } from "sonner"
 
 
 const statusColors = {
@@ -87,7 +96,8 @@ export default function SupportDashboard() {
   const [chartData, setChartData] = useState<ChartData>({
     ticketVolumeData: [],
     openTicketTypeData: [],
-    ageBreakdownData: []
+    ageBreakdownData: [],
+    statusData: []
   })
   const [sdmOptions, setSdmOptions] = useState<Array<{value: string, label: string}>>([])
   const [companyOptions, setCompanyOptions] = useState<Array<{value: string, label: string}>>([])
@@ -99,7 +109,11 @@ export default function SupportDashboard() {
   const [showAIModal, setShowAIModal] = useState(false)
   const [showMonthlyReviewModal, setShowMonthlyReviewModal] = useState(false)
   const [showExecutiveSummaryModal, setShowExecutiveSummaryModal] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<TicketData[]>([])
+  const [showSearchResults, setShowSearchResults] = useState(false)
   const [slaOverrides, setSlaOverrides] = useState<{ [ticketId: string]: boolean }>({})
+  const [loadingTickets, setLoadingTickets] = useState<Set<string>>(new Set())
 
   // Don't load CSV data on mount - wait for user upload
 
@@ -279,7 +293,8 @@ export default function SupportDashboard() {
     setChartData({
       ticketVolumeData: monthlyChartData.ticketVolumeData,
       openTicketTypeData: pieChartData.openTicketTypeData,
-      ageBreakdownData: pieChartData.ageBreakdownData
+      ageBreakdownData: pieChartData.ageBreakdownData,
+      statusData: filteredProcessor.getChartData().statusData
     })
   }
 
@@ -376,6 +391,217 @@ export default function SupportDashboard() {
     window.open(freshdeskUrl, '_blank')
   }
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      performSearch()
+    }
+  }
+
+  const performSearch = () => {
+    if (!searchQuery.trim()) {
+      setShowSearchResults(false)
+      setSearchResults([])
+      return
+    }
+
+    // Search for exact incident ID match
+    const results = tickets.filter(ticket => 
+      ticket.ticketId === searchQuery.trim()
+    )
+    
+    setSearchResults(results)
+    setShowSearchResults(true)
+  }
+
+  const clearSearch = () => {
+    setSearchQuery('')
+    setSearchResults([])
+    setShowSearchResults(false)
+  }
+
+  // SLA toggle functionality for search results
+  const toggleSLAStatus = async (ticketId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus
+    const slaStatus = newStatus ? 'SLA Violated' : 'Within SLA'
+    
+    console.log(`Toggle SLA for ticket ${ticketId}: ${currentStatus ? 'Breached' : 'Within SLA'} → ${slaStatus}`)
+    
+    // Add to loading state
+    setLoadingTickets(prev => new Set(prev).add(ticketId))
+    
+    try {
+      // Update local state first for immediate UI feedback
+      const newOverrides = {
+        ...slaOverrides,
+        [ticketId]: newStatus
+      }
+      setSlaOverrides(newOverrides)
+      
+      // Update search results immediately
+      setSearchResults(prevResults => 
+        prevResults.map(result => 
+          result.ticketId === ticketId 
+            ? { ...result, resolutionStatus: newStatus ? 'SLA Violated' : 'Within SLA' }
+            : result
+        )
+      )
+      
+      // Update Freshdesk via API route
+      const response = await freshdeskClient.updateSLAStatus(ticketId, slaStatus)
+      
+      if (response.error) {
+        // Revert local state if API call failed
+        setSlaOverrides(slaOverrides)
+        setSearchResults(prevResults => 
+          prevResults.map(result => 
+            result.ticketId === ticketId 
+              ? { ...result, resolutionStatus: currentStatus ? 'SLA Violated' : 'Within SLA' }
+              : result
+          )
+        )
+        toast.error(`Failed to update SLA status in Freshdesk: ${response.error}`)
+      } else {
+        toast.success(slaStatus === 'Within SLA' 
+          ? `Ticket marked as Within SLA (override applied) in Freshdesk` 
+          : `Override cleared - ticket follows normal SLA calculation in Freshdesk`)
+      }
+    } catch (error) {
+      // Revert local state if something went wrong
+      setSlaOverrides(slaOverrides)
+      setSearchResults(prevResults => 
+        prevResults.map(result => 
+          result.ticketId === ticketId 
+            ? { ...result, resolutionStatus: currentStatus ? 'SLA Violated' : 'Within SLA' }
+            : result
+        )
+      )
+      toast.error(`Failed to update SLA status: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      // Remove from loading state
+      setLoadingTickets(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(ticketId)
+        return newSet
+      })
+    }
+  }
+
+  // Helper function to determine if ticket is breached
+  const isTicketBreached = (ticket: TicketData): boolean => {
+    // Check if manual override exists (highest priority)
+    if (slaOverrides.hasOwnProperty(ticket.ticketId)) {
+      return slaOverrides[ticket.ticketId]
+    }
+    
+    // Check CSV "Within SLA Override" field first
+    if (ticket.withinSlaOverride && ticket.withinSlaOverride.toLowerCase() === 'true') {
+      return false // Override says within SLA
+    }
+    
+    // Use existing resolution status logic
+    if (ticket.resolutionStatus === 'Within SLA') {
+      return false
+    } else if (ticket.resolutionStatus === 'SLA Violated') {
+      return true
+    } else if (!ticket.resolutionStatus || ticket.resolutionStatus.trim() === '') {
+      // If resolution status is blank, check due date and status
+      if (ticket.status === 'Pending' || ticket.status === 'Pending - Close') {
+        return false // Assume still within SLA
+      } else {
+        // Check if due date has been reached
+        const dueDate = new Date(ticket.dueByTime)
+        const now = new Date()
+        return now > dueDate
+      }
+    }
+    
+    return false
+  }
+
+  const getDateFilterLabel = (dateFilter: string): string => {
+    switch (dateFilter) {
+      case 'last3months': return 'Last 3 Months'
+      case 'last6months': return 'Last 6 Months'
+      case 'lastyear': return 'Last 12 Months'
+      case 'all': return 'All Time'
+      default:
+        if (dateFilter?.includes('-')) {
+          const [year, month] = dateFilter.split('-')
+          const date = new Date(parseInt(year), parseInt(month) - 1, 1)
+          return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+        }
+        return 'Selected Period'
+    }
+  }
+
+  const handleExcelExport = () => {
+    const filteredTickets = getFilteredTickets()
+    
+    if (filteredTickets.length === 0) {
+      alert('No tickets to export with current filters')
+      return
+    }
+
+    // Create CSV content
+    const headers = [
+      'Ticket ID',
+      'Subject',
+      'Company',
+      'Agent',
+      'SDM',
+      'Status',
+      'Priority',
+      'Type',
+      'Created Time',
+      'Resolved Time',
+      'Resolution Status',
+      'Due By Time',
+      'SDM Escalation'
+    ]
+
+    const csvRows = [headers.join(',')]
+    
+    filteredTickets.forEach(ticket => {
+      const row = [
+        ticket.ticketId || '',
+        `"${(ticket.subject || '').replace(/"/g, '""')}"`,
+        `"${(ticket.companyName || '').replace(/"/g, '""')}"`,
+        `"${(ticket.agent || '').replace(/"/g, '""')}"`,
+        `"${(ticket.sdm || '').replace(/"/g, '""')}"`,
+        ticket.status || '',
+        ticket.priority || '',
+        ticket.type || '',
+        ticket.createdTime || '',
+        ticket.resolvedTime || '',
+        ticket.resolutionStatus || '',
+        ticket.dueByTime || '',
+        ticket.sdmEscalation || ''
+      ]
+      csvRows.push(row.join(','))
+    })
+
+    const csvContent = csvRows.join('\n')
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    
+    // Generate filename based on current filters
+    const timestamp = new Date().toISOString().split('T')[0]
+    const companyName = selectedCompany && selectedCompany !== 'all' ? selectedCompany.replace(/[^a-zA-Z0-9]/g, '_') : 'All_Companies'
+    const sdmName = selectedSDM && selectedSDM !== 'all' ? selectedSDM.replace(/[^a-zA-Z0-9]/g, '_') : 'All_SDMs'
+    const dateFilter = selectedDateFilter && selectedDateFilter !== 'all' ? selectedDateFilter : 'All_Time'
+    
+    const filename = `Service_Desk_Export_${companyName}_${sdmName}_${dateFilter}_${timestamp}.csv`
+    
+    link.setAttribute('href', URL.createObjectURL(blob))
+    link.setAttribute('download', filename)
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const MetricCard = ({
     title,
     value,
@@ -441,7 +667,10 @@ export default function SupportDashboard() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search incidents..."
+                  placeholder="Search incident ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
                   className="pl-10 bg-gray-700 border-gray-600 text-white placeholder-gray-400 w-64"
                 />
               </div>
@@ -521,6 +750,19 @@ export default function SupportDashboard() {
               >
                 Clear Filters
               </Button>
+
+              {/* Clear Search Button - only show when search is active */}
+              {showSearchResults && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:text-white hover:bg-white/20"
+                  onClick={clearSearch}
+                >
+                  Clear Search
+                </Button>
+              )}
+
             </div>
 
             {/* Export and AI Icons */}
@@ -557,6 +799,7 @@ export default function SupportDashboard() {
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/20"
                 title="Export to Excel"
+                onClick={handleExcelExport}
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 <span className="ml-1 text-xs">Excel</span>
@@ -607,58 +850,239 @@ export default function SupportDashboard() {
         {/* Dashboard Content - only show when data is loaded */}
         {hasData && (
           <div>
-            {/* Key Metrics */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
-            {[...Array(5)].map((_, i) => (
-              <Card key={i} className="border-0 bg-white/80 backdrop-blur-sm">
-                <CardContent className="p-6">
-                  <div className="animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                    <div className="h-8 bg-gray-200 rounded w-1/2"></div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
-            <MetricCard 
-              title="Total Tickets" 
-              value={metrics.totalTickets} 
-              icon={Activity} 
-              trend="up" 
-            />
-            <MetricCard 
-              title="Open Tickets" 
-              value={metrics.openTickets} 
-              icon={AlertTriangle} 
-              trend="up" 
-            />
-            <MetricCard 
-              title="Closed Tickets" 
-              value={metrics.closedTickets} 
-              icon={CheckCircle} 
-              trend="up" 
-            />
-            <MetricCard 
-              title="Avg Resolution" 
-              value={`${metrics.avgResolution}h`} 
-              icon={Clock} 
-              trend="down" 
-            />
-            <MetricCard 
-              title="SLA Compliance" 
-              value={`${metrics.slaCompliance}%`} 
-              icon={Target} 
-              trend="up" 
-              onClick={() => setShowSLAModal(true)}
-            />
-          </div>
-        )}
+            {/* Search Results */}
+            {showSearchResults && (
+              <div className="mb-8">
+                <Card className="border-0 bg-white/80 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Search Results for "{searchQuery}"</span>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline">
+                          {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearSearch}
+                          className="h-8 w-8 p-0"
+                          title="Close search results"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {searchResults.length === 0 ? (
+                      <p className="text-center text-gray-500 py-8">
+                        No incident found with ID: {searchQuery}
+                      </p>
+                    ) : (
+                      <div className="space-y-6">
+                        {searchResults.map((ticket) => {
+                          const isBreached = isTicketBreached(ticket)
+                          return (
+                            <div 
+                              key={ticket.ticketId}
+                              className={`p-6 rounded-lg border-l-4 ${
+                                isBreached 
+                                  ? 'border-red-500 bg-red-50' 
+                                  : 'border-green-500 bg-green-50'
+                              }`}
+                            >
+                              {/* Header with Ticket ID and SLA Status */}
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center space-x-3">
+                                  <span 
+                                    className="text-xl font-bold text-blue-600 cursor-pointer hover:text-blue-800 underline" 
+                                    onClick={() => handleTicketClick(ticket.ticketId)}
+                                  >
+                                    {ticket.ticketId}
+                                  </span>
+                                  <Badge className={`${
+                                    ticket.priority === 'Urgent' ? 'bg-red-100 text-red-800' :
+                                    ticket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                                    ticket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {ticket.priority}
+                                  </Badge>
+                                  <Badge variant="outline">{ticket.status}</Badge>
+                                  <Badge variant="outline">{ticket.type}</Badge>
+                                </div>
+                                
+                                {/* SLA Toggle */}
+                                <div className="flex items-center space-x-3">
+                                  <div className={`flex items-center ${isBreached ? 'text-red-600' : 'text-green-600'}`}>
+                                    {isBreached ? (
+                                      <AlertTriangle className="h-4 w-4 mr-1" />
+                                    ) : (
+                                      <CheckCircle className="h-4 w-4 mr-1" />
+                                    )}
+                                    <span className="font-medium">
+                                      {isBreached ? 'SLA Breached' : 'Within SLA'}
+                                    </span>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="p-1 h-8 w-8"
+                                    onClick={() => toggleSLAStatus(ticket.ticketId, isBreached)}
+                                    title={`Toggle to ${isBreached ? 'Within SLA' : 'SLA Breached'}`}
+                                    disabled={loadingTickets.has(ticket.ticketId)}
+                                  >
+                                    {loadingTickets.has(ticket.ticketId) ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : isBreached ? (
+                                      <ToggleLeft className="h-5 w-5 text-red-600" />
+                                    ) : (
+                                      <ToggleRight className="h-5 w-5 text-green-600" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
 
-        {/* Small Gap */}
-        <div className="mb-6"></div>
+                              {/* Subject */}
+                              <h3 className="text-lg font-semibold text-gray-900 mb-4">{ticket.subject}</h3>
+
+                              {/* All Field Values in a Grid */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-gray-700 border-b pb-1">Contact Information</h4>
+                                  <div><span className="font-medium">Company:</span> {ticket.companyName || 'N/A'}</div>
+                                  <div><span className="font-medium">Requester:</span> {ticket.requester || 'N/A'}</div>
+                                  <div><span className="font-medium">Email:</span> {ticket.requesterEmail || 'N/A'}</div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-gray-700 border-b pb-1">Assignment</h4>
+                                  <div><span className="font-medium">Agent:</span> {ticket.agent || 'N/A'}</div>
+                                  <div><span className="font-medium">SDM:</span> {ticket.sdm || 'N/A'}</div>
+                                  <div><span className="font-medium">Group:</span> {ticket.group || 'N/A'}</div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-gray-700 border-b pb-1">Timestamps</h4>
+                                  <div><span className="font-medium">Created:</span> {ticket.createdTime ? new Date(ticket.createdTime).toLocaleString() : 'N/A'}</div>
+                                  <div><span className="font-medium">Updated:</span> {ticket.updatedTime ? new Date(ticket.updatedTime).toLocaleString() : 'N/A'}</div>
+                                  <div><span className="font-medium">Due By:</span> {ticket.dueByTime ? new Date(ticket.dueByTime).toLocaleString() : 'N/A'}</div>
+                                  {ticket.resolvedTime && (
+                                    <div><span className="font-medium">Resolved:</span> {new Date(ticket.resolvedTime).toLocaleString()}</div>
+                                  )}
+                                  {ticket.closedTime && (
+                                    <div><span className="font-medium">Closed:</span> {new Date(ticket.closedTime).toLocaleString()}</div>
+                                  )}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-gray-700 border-b pb-1">Classification</h4>
+                                  <div><span className="font-medium">Source:</span> {ticket.source || 'N/A'}</div>
+                                  <div><span className="font-medium">Category:</span> {ticket.category || 'N/A'}</div>
+                                  <div><span className="font-medium">Sub-category:</span> {ticket.subCategory || 'N/A'}</div>
+                                  <div><span className="font-medium">Item Category:</span> {ticket.itemCategory || 'N/A'}</div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-gray-700 border-b pb-1">SLA & Status</h4>
+                                  <div><span className="font-medium">Resolution Status:</span> {ticket.resolutionStatus || 'N/A'}</div>
+                                  <div><span className="font-medium">SDM Escalation:</span> {ticket.sdmEscalation === 'true' ? 'Yes' : 'No'}</div>
+                                  <div><span className="font-medium">First Response Due:</span> {ticket.frDueByTime ? new Date(ticket.frDueByTime).toLocaleString() : 'N/A'}</div>
+                                  {slaOverrides.hasOwnProperty(ticket.ticketId) && (
+                                    <div className="text-blue-600 font-medium">(Manual Override Applied)</div>
+                                  )}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-gray-700 border-b pb-1">Additional Info</h4>
+                                  <div><span className="font-medium">Tags:</span> {ticket.tags || 'N/A'}</div>
+                                  <div><span className="font-medium">Custom Fields:</span> {ticket.customFields || 'N/A'}</div>
+                                  {ticket.description && (
+                                    <div className="col-span-full mt-4">
+                                      <h4 className="font-semibold text-gray-700 border-b pb-1 mb-2">Description</h4>
+                                      <p className="text-gray-600 bg-gray-100 p-3 rounded text-xs">{ticket.description}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Key Metrics */}
+            <Card className="border-0 bg-white/80 backdrop-blur-sm mb-8">
+              <CardHeader>
+                <CardTitle className="text-gray-900 flex items-center">
+                  <CalendarIcon className="h-5 w-5 text-blue-600 mr-2" />
+                  Key Metrics - {getDateFilterLabel(selectedDateFilter)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="p-6 rounded-lg bg-gray-50">
+                        <div className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="p-6 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-600">Total Tickets</p>
+                          <p className="text-3xl font-bold text-gray-900">{metrics.totalTickets}</p>
+                        </div>
+                        <Activity className="h-8 w-8 text-blue-600" />
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 rounded-lg bg-orange-50 hover:bg-orange-100 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-orange-600">Open Tickets</p>
+                          <p className="text-3xl font-bold text-gray-900">{metrics.openTickets}</p>
+                        </div>
+                        <AlertTriangle className="h-8 w-8 text-orange-600" />
+                      </div>
+                    </div>
+                    
+                    <div className="p-6 rounded-lg bg-green-50 hover:bg-green-100 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-600">Closed Tickets</p>
+                          <p className="text-3xl font-bold text-gray-900">{metrics.closedTickets}</p>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-green-600" />
+                      </div>
+                    </div>
+                    
+                    <div 
+                      className="p-6 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors cursor-pointer"
+                      onClick={() => setShowSLAModal(true)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-purple-600">SLA Compliance</p>
+                          <p className="text-3xl font-bold text-gray-900">{metrics.slaCompliance}%</p>
+                        </div>
+                        <Target className="h-8 w-8 text-purple-600" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -693,21 +1117,38 @@ export default function SupportDashboard() {
           </Card>
         </div>
 
-        {/* Age Breakdown Chart */}
-        <Card className="border-0 bg-white/80 backdrop-blur-sm mb-6">
-          <CardHeader>
-            <CardTitle className="text-gray-900">Breakdown by Age of Ticket</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="h-64 flex items-center justify-center">
-                <div className="animate-pulse bg-gray-200 rounded w-full h-full"></div>
-              </div>
-            ) : (
-              <TicketAgeBreakdownChart data={chartData.ageBreakdownData} />
-            )}
-          </CardContent>
-        </Card>
+        {/* Second Row of Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <Card className="border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-gray-900">Breakdown by Age of Ticket</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="h-64 flex items-center justify-center">
+                  <div className="animate-pulse bg-gray-200 rounded w-full h-full"></div>
+                </div>
+              ) : (
+                <TicketAgeBreakdownChart data={chartData.ageBreakdownData} />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-gray-900">Open Tickets by Status</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="h-64 flex items-center justify-center">
+                  <div className="animate-pulse bg-gray-200 rounded w-full h-full"></div>
+                </div>
+              ) : (
+                <TicketStatusChart data={chartData.statusData} />
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Escalated Tickets Section */}
         <Card className="border-0 bg-white/80 backdrop-blur-sm mb-6">
@@ -897,6 +1338,7 @@ export default function SupportDashboard() {
           selectedDateFilter={selectedDateFilter}
         />
       )}
+
       
     </div>
   )

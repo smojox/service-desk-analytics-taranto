@@ -75,6 +75,7 @@ export interface TicketData {
   sdm: string
   contractCode: string
   serviceCredits: string
+  withinSlaOverride: string
 }
 
 export function parseCSV(csvContent: string): TicketData[] {
@@ -166,7 +167,8 @@ export function parseCSV(csvContent: string): TicketData[] {
       civicaVersion: values[72] || '',
       sdm: values[73] || '',
       contractCode: values[74] || '',
-      serviceCredits: values[75] || ''
+      serviceCredits: values[75] || '',
+      withinSlaOverride: values[76] || ''
     }
     
     tickets.push(ticket)

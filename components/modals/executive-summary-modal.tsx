@@ -147,7 +147,7 @@ We look forward to discussing these results and our continued partnership.`)
             <CardHeader>
               <CardTitle className="flex items-center text-sm">
                 <Sparkles className="h-4 w-4 text-purple-600 mr-2" />
-                AI-Generated Professional Summary
+                Professional Summary
               </CardTitle>
             </CardHeader>
             <CardContent>
