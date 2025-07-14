@@ -1,6 +1,6 @@
-# 📊 Service Desk Analytics Dashboard v1.0
+# 📊 Service Desk Analytics Dashboard v1.1
 
-[![Release](https://img.shields.io/badge/release-v1.0-blue.svg)](https://github.com/smojox/service-desk-analytics-taranto/releases/tag/v1.0)
+[![Release](https://img.shields.io/badge/release-v1.1-blue.svg)](https://github.com/smojox/service-desk-analytics-taranto/releases/tag/v1.1)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.0-38B2AC.svg)](https://tailwindcss.com/)
@@ -30,6 +30,10 @@ A comprehensive service desk analytics dashboard built for Taranto, providing po
 
 ### 📊 **Professional Exports**
 - **PDF Service Reviews**: Comprehensive reports with charts, metrics, and professional formatting
+- **Page Selection**: Choose specific pages to include in PDF exports with customizable options
+- **Detailed Analysis Pages**: Open Incidents/Service Requests with pagination, Problem Records with JIRA references
+- **Age Breakdown Charts**: Breakdown by Age of Ticket with vertical date formatting (MMM/YY)
+- **Escalation Process Integration**: Automated inclusion of escalation documentation
 - **Excel Data Export**: Detailed monthly review data for further analysis
 - **Print-ready Reports**: Formatted for stakeholder presentations and archival
 
@@ -230,4 +234,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **🤖 Generated with [Claude Code](https://claude.ai/code)**
 
-**v1.0 Release** - January 2025 | Built for Taranto Service Desk Analytics
+**v1.1 Release** - July 2025 | Built for Taranto Service Desk Analytics
+
+## 🔄 Version 1.1 Release Notes
+
+### New Features
+- **PDF Page Selection**: Choose which pages to include in PDF exports with checkbox interface
+- **Enhanced Ticket Analysis**: New dedicated pages for Open Incidents/Service Requests and Problem Records
+- **Improved Chart Formatting**: Vertical date labels with MMM/YY format for better readability
+- **Escalation Process Integration**: Automatic inclusion of escalation documentation in PDF exports
+- **Pagination Support**: 15 tickets per page for detailed analysis sections
+- **Production Optimizations**: Cleaned up project structure and improved performance
+
+### Improvements
+- Removed SDM management text from executive summaries for cleaner presentation
+- Replaced Performance Summary with Priority breakdown analysis
+- Enhanced chart positioning and alignment across all PDF pages
+- Improved filtering for company-specific data across all analysis pages
+- Better handling of JIRA references in Problem Records
