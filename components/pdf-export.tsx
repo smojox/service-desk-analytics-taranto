@@ -54,7 +54,11 @@ export class ClientServiceReportGenerator {
       
       await this.createMonthlyChartsPageWithTemplate(chartData, allTickets || tickets, selectedCompany, selectedSDM)
       await this.createTicketTypesPieChartPageWithTemplate(chartData)
+      await this.createTicketAgeBreakdownPageWithTemplate(chartData, selectedCompany)
+      await this.createOpenTicketsPageWithTemplate(allTickets || tickets, selectedCompany)
+      await this.createProblemTicketsPageWithTemplate(allTickets || tickets, selectedCompany)
       await this.createQuestionsPageWithTemplate()
+      await this.createEscalationProcessPageWithTemplate()
       await this.createFinalPageWithTemplate()
       
       // Generate and download
@@ -173,8 +177,18 @@ export class ClientServiceReportGenerator {
     // Use Page 2 (index 1) of template
     const page = await this.copyTemplatePageWithOverlay(1)
     const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+    const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
     
     const { height } = page.getSize()
+    
+    // Add agenda title in white text, moved down 1cm from previous position
+    page.drawText('Agenda', {
+      x: 80,
+      y: height - 77,
+      size: 24,
+      font: boldFont,
+      color: rgb(1, 1, 1), // White text
+    })
     
     // Add agenda items (reflect actual page headings)
     const agendaItems = []
@@ -191,7 +205,11 @@ export class ClientServiceReportGenerator {
       'Escalated Tickets Analysis',
       'Monthly Created vs Resolved Tickets',
       'Open Tickets by Type',
-      'Questions & Discussion'
+      'Breakdown by Age of Ticket',
+      'Open Incidents and Service Requests',
+      'Open Problem Records',
+      'Questions & Discussion',
+      'Escalation Process'
     )
     
     const startY = height - 206 // Move down 2cm more (was 150, now 206 = 150 + 56 points)
@@ -1068,8 +1086,8 @@ export class ClientServiceReportGenerator {
       })
     })
     
-    // Bottom Right: Performance Summary
-    page.drawText('Performance Summary', {
+    // Bottom Right: Summary of tickets by Priority
+    page.drawText('Summary of tickets by Priority', {
       x: rightX,
       y: bottomY,
       size: sectionTitleSize,
@@ -1077,16 +1095,22 @@ export class ClientServiceReportGenerator {
       color: tealColor,
     })
     
-    const performance = metrics.slaCompliance >= 90 ? 'Excellent' : metrics.slaCompliance >= 70 ? 'Good' : 'Needs Attention'
-    const resolution = metrics.avgResolution <= 8 ? 'Fast' : metrics.avgResolution <= 24 ? 'Moderate' : 'Slow'
+    // Count tickets by priority level
+    const priorityCounts = {
+      'Priority 1': tickets.filter(t => t.priority === 'Urgent').length,
+      'Priority 2': tickets.filter(t => t.priority === 'High').length,
+      'Priority 3': tickets.filter(t => t.priority === 'Medium').length,
+      'Priority 4': tickets.filter(t => t.priority === 'Low').length,
+    }
     
-    const summaryData = [
-      `Overall: ${performance}`,
-      `Resolution: ${resolution}`,
-      `Service Level: ${metrics.slaCompliance}%`,
+    const priorityData = [
+      `Priority 1: ${priorityCounts['Priority 1']}`,
+      `Priority 2: ${priorityCounts['Priority 2']}`,
+      `Priority 3: ${priorityCounts['Priority 3']}`,
+      `Priority 4: ${priorityCounts['Priority 4']}`,
     ]
     
-    summaryData.forEach((item, index) => {
+    priorityData.forEach((item, index) => {
       page.drawText(item, {
         x: rightX,
         y: bottomY - 30 - (index * 20),
@@ -1157,6 +1181,488 @@ export class ClientServiceReportGenerator {
           return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
         }
         return 'All Time'
+    }
+  }
+
+  private async createTicketAgeBreakdownPageWithTemplate(chartData: ChartData, selectedCompany?: string): Promise<void> {
+    // Use Page 3 (blank canvas) for age breakdown chart
+    const page = await this.copyTemplatePageWithOverlay(2)
+    const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+    const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
+    
+    const { width, height } = page.getSize()
+    const tealColor = rgb(0.06, 0.46, 0.43)
+    const textColor = rgb(0.2, 0.2, 0.2)
+    
+    // Page title
+    page.drawText('Breakdown by Age of Ticket (All Time)', {
+      x: 50,
+      y: height - 60,
+      size: 20,
+      font: boldFont,
+      color: tealColor,
+    })
+    
+    const companyText = selectedCompany && selectedCompany !== 'all' ? ` - ${selectedCompany}` : ' - All Companies'
+    page.drawText(`Open Tickets by Creation Month and Type${companyText}`, {
+      x: 50, y: height - 90, size: 14, font: font, color: textColor,
+    })
+    
+    const ageData = chartData.ageBreakdownData
+    if (ageData.length === 0) {
+      page.drawText('No age breakdown data available', {
+        x: 50, y: height - 150, size: 12, font: font, color: textColor,
+      })
+      return
+    }
+    
+    // Chart dimensions - match pie chart positioning, moved 3cm up (85 points)
+    const chartX = 50
+    const chartY = height - 365
+    const chartWidth = 400
+    const chartHeight = 200
+    
+    // Colors for different ticket types
+    const typeColors = {
+      incidents: rgb(0.2, 0.6, 1),
+      serviceRequests: rgb(0.8, 0.4, 0.2),
+      problems: rgb(0.8, 0.2, 0.2),
+      other: rgb(0.6, 0.6, 0.6)
+    }
+    
+    // Find max value for scaling
+    const maxValue = Math.max(...ageData.map(d => d.incidents + d.serviceRequests + d.problems + d.other))
+    const scale = maxValue > 0 ? chartHeight / maxValue : 1
+    
+    // Draw axes
+    page.drawLine({
+      start: { x: chartX, y: chartY },
+      end: { x: chartX + chartWidth, y: chartY },
+      thickness: 1,
+      color: textColor,
+    })
+    page.drawLine({
+      start: { x: chartX, y: chartY },
+      end: { x: chartX, y: chartY + chartHeight },
+      thickness: 1,
+      color: textColor,
+    })
+    
+    // Draw bars
+    const barWidth = Math.min(chartWidth / (ageData.length * 1.2), 35)
+    const barSpacing = chartWidth / ageData.length
+    
+    ageData.forEach((data, index) => {
+      const barX = chartX + (index * barSpacing) + (barSpacing - barWidth) / 2
+      let currentY = chartY
+      
+      // Stack bars for each type
+      const types = [
+        { key: 'incidents', value: data.incidents, color: typeColors.incidents },
+        { key: 'serviceRequests', value: data.serviceRequests, color: typeColors.serviceRequests },
+        { key: 'problems', value: data.problems, color: typeColors.problems },
+        { key: 'other', value: data.other, color: typeColors.other }
+      ]
+      
+      types.forEach(type => {
+        if (type.value > 0) {
+          const barHeight = type.value * scale
+          page.drawRectangle({
+            x: barX,
+            y: currentY,
+            width: barWidth,
+            height: barHeight,
+            color: type.color,
+          })
+          currentY += barHeight
+        }
+      })
+      
+      // Format month label as MMM/YY format from YYYY-MM format
+      const formatMonthLabel = (monthString: string) => {
+        if (monthString.includes('-')) {
+          const [year, month] = monthString.split('-')
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+          const monthIndex = parseInt(month) - 1
+          const shortMonth = monthNames[monthIndex] || 'Unknown'
+          const shortYear = year.substring(2)
+          return `${shortMonth}/${shortYear}`
+        }
+        return monthString
+      }
+      
+      const monthLabel = formatMonthLabel(data.month)
+      
+      // Draw month label vertically
+      const labelChars = monthLabel.split('')
+      labelChars.forEach((char, charIndex) => {
+        page.drawText(char, {
+          x: barX + barWidth / 2 - 3,
+          y: chartY - 30 - (charIndex * 12),
+          size: 8,
+          font: font,
+          color: textColor,
+        })
+      })
+      
+      // Draw total count above bar
+      const total = data.incidents + data.serviceRequests + data.problems + data.other
+      if (total > 0) {
+        page.drawText(total.toString(), {
+          x: barX + barWidth / 2 - 5,
+          y: currentY + 5,
+          size: 8,
+          font: font,
+          color: textColor,
+        })
+      }
+    })
+    
+    // Legend and summary positioning - match pie chart layout
+    const chartSummaryX = width - 300 // Position at far right to match pie chart
+    let legendY = height - 130 // Match pie chart legend position
+    const legendX = chartSummaryX // Align with Chart Summary
+    
+    page.drawText('Legend:', {
+      x: legendX, y: legendY + 20, size: 14, font: boldFont, color: tealColor,
+    })
+    
+    const legendItems = [
+      { label: 'Incidents', color: typeColors.incidents },
+      { label: 'Service Requests', color: typeColors.serviceRequests },
+      { label: 'Problems', color: typeColors.problems },
+      { label: 'Other', color: typeColors.other }
+    ]
+    
+    legendItems.forEach((item, index) => {
+      const y = legendY - (index * 20)
+      
+      // Draw colored rectangle
+      page.drawRectangle({
+        x: legendX, y: y - 5, width: 15, height: 10,
+        color: item.color,
+      })
+      
+      // Draw label
+      page.drawText(item.label, {
+        x: legendX + 20, y: y - 2, size: 9, font: font, color: textColor,
+      })
+    })
+    
+    // Summary statistics - match pie chart summary positioning
+    const totalByType = ageData.reduce((acc, data) => ({
+      incidents: acc.incidents + data.incidents,
+      serviceRequests: acc.serviceRequests + data.serviceRequests,
+      problems: acc.problems + data.problems,
+      other: acc.other + data.other
+    }), { incidents: 0, serviceRequests: 0, problems: 0, other: 0 })
+    
+    const totalTickets = Object.values(totalByType).reduce((sum, count) => sum + count, 0)
+    
+    page.drawText('Chart Summary:', {
+      x: chartSummaryX, y: 180, size: 16, font: boldFont, color: tealColor,
+    })
+    
+    page.drawText(`• Total open tickets: ${totalTickets}`, {
+      x: chartSummaryX, y: 155, size: 12, font: font, color: textColor,
+    })
+    
+    page.drawText(`• Incidents: ${totalByType.incidents} tickets`, {
+      x: chartSummaryX, y: 135, size: 12, font: font, color: textColor,
+    })
+    
+    page.drawText(`• Service Requests: ${totalByType.serviceRequests} tickets`, {
+      x: chartSummaryX, y: 115, size: 12, font: font, color: textColor,
+    })
+    
+    page.drawText(`• Problems: ${totalByType.problems} tickets`, {
+      x: chartSummaryX, y: 95, size: 12, font: font, color: textColor,
+    })
+  }
+
+  private async createOpenTicketsPageWithTemplate(tickets: TicketData[], selectedCompany?: string): Promise<void> {
+    // Filter for open Incidents and Service Requests by company
+    const openTickets = tickets.filter(t => 
+      t.status !== 'Resolved' && t.status !== 'Closed' && 
+      (t.type === 'Incident' || t.type === 'Service Request') &&
+      (selectedCompany === 'all' || !selectedCompany || t.companyName === selectedCompany)
+    )
+    
+    if (openTickets.length === 0) {
+      return // Don't create page if no open tickets
+    }
+    
+    const ticketsPerPage = 15
+    const totalPages = Math.ceil(openTickets.length / ticketsPerPage)
+    
+    // Create pages for all tickets
+    for (let pageNum = 0; pageNum < totalPages; pageNum++) {
+      const startIndex = pageNum * ticketsPerPage
+      const endIndex = startIndex + ticketsPerPage
+      const pageTickets = openTickets.slice(startIndex, endIndex)
+      
+      // Use Page 3 (blank canvas) for open tickets details
+      const page = await this.copyTemplatePageWithOverlay(2)
+      const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+      const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
+      
+      const { width, height } = page.getSize()
+      const tealColor = rgb(0.06, 0.46, 0.43)
+      const textColor = rgb(0.2, 0.2, 0.2)
+      const redColor = rgb(0.8, 0.2, 0.2)
+      
+      // Page title with page number if multiple pages
+      const pageTitle = totalPages > 1 ? 
+        `Open Incidents and Service Requests (All Time) - Page ${pageNum + 1} of ${totalPages}` :
+        'Open Incidents and Service Requests (All Time)'
+      
+      page.drawText(pageTitle, {
+        x: 50,
+        y: height - 60,
+        size: 20,
+        font: boldFont,
+        color: tealColor,
+      })
+      
+      // Summary (only on first page)
+      if (pageNum === 0) {
+        const incidentCount = openTickets.filter(t => t.type === 'Incident').length
+        const serviceRequestCount = openTickets.filter(t => t.type === 'Service Request').length
+        
+        page.drawText(`Total Open Tickets: ${openTickets.length} (All Time)`, {
+          x: 50, y: height - 100, size: 12, font: font, color: textColor,
+        })
+        page.drawText(`Incidents: ${incidentCount} | Service Requests: ${serviceRequestCount}`, {
+          x: 50, y: height - 120, size: 12, font: font, color: textColor,
+        })
+      }
+      
+      // Table headers
+      const tableY = height - 180
+      const headerHeight = 20
+      const rowHeight = 18
+      const columnX = [50, 130, 330, 420, 510, 600]
+      const headers = ['Ticket ID', 'Summary', 'Created', 'Priority', 'Type', 'Agent']
+      
+      // Draw header background
+      page.drawRectangle({
+        x: 50, y: tableY - 5, width: width - 100, height: headerHeight,
+        color: rgb(0.9, 0.9, 0.9),
+      })
+      
+      // Draw headers
+      headers.forEach((header, index) => {
+        page.drawText(header, {
+          x: columnX[index], y: tableY + 5, size: 10, font: boldFont, color: textColor,
+        })
+      })
+      
+      // Draw ticket data rows for this page
+      pageTickets.forEach((ticket, index) => {
+        const y = tableY - headerHeight - (index * rowHeight)
+        const rowColor = index % 2 === 0 ? rgb(0.98, 0.98, 0.98) : rgb(1, 1, 1)
+        
+        // Draw row background
+        page.drawRectangle({
+          x: 50, y: y - 5, width: width - 100, height: rowHeight,
+          color: rowColor,
+        })
+        
+        // Draw row data - truncate summary to 25 characters like SLA compliance
+        const truncatedSummary = (ticket.subject || 'No Subject').length > 25 ? 
+          (ticket.subject || 'No Subject').substring(0, 25) + '...' : 
+          (ticket.subject || 'No Subject')
+        
+        const rowData = [
+          ticket.ticketId || 'N/A',
+          truncatedSummary,
+          ticket.createdTime ? new Date(ticket.createdTime).toLocaleDateString() : 'N/A',
+          ticket.priority || 'N/A',
+          ticket.type || 'N/A',
+          ticket.agent || 'N/A',
+        ]
+        
+        rowData.forEach((data, colIndex) => {
+          const priorityColor = ticket.priority === 'Urgent' ? redColor : textColor
+          page.drawText(data, {
+            x: columnX[colIndex], y: y + 2, size: 8, font: font, 
+            color: colIndex === 3 ? priorityColor : textColor,
+          })
+        })
+      })
+      
+      // Show page info at bottom
+      page.drawText(`Page ${pageNum + 1} of ${totalPages} | Showing ${startIndex + 1}-${Math.min(endIndex, openTickets.length)} of ${openTickets.length} tickets`, {
+        x: 50, y: 50, size: 10, font: font, color: textColor,
+      })
+    }
+  }
+
+  private async createProblemTicketsPageWithTemplate(tickets: TicketData[], selectedCompany?: string): Promise<void> {
+    // Filter for open Problem type records by company
+    const problemTickets = tickets.filter(t => 
+      t.type === 'Problem' &&
+      t.status !== 'Resolved' && t.status !== 'Closed' &&
+      (selectedCompany === 'all' || !selectedCompany || t.companyName === selectedCompany)
+    )
+    
+    if (problemTickets.length === 0) {
+      return // Don't create page if no open problem tickets
+    }
+    
+    const ticketsPerPage = 15
+    const totalPages = Math.ceil(problemTickets.length / ticketsPerPage)
+    
+    // Create pages for all tickets
+    for (let pageNum = 0; pageNum < totalPages; pageNum++) {
+      const startIndex = pageNum * ticketsPerPage
+      const endIndex = startIndex + ticketsPerPage
+      const pageTickets = problemTickets.slice(startIndex, endIndex)
+      
+      // Use Page 3 (blank canvas) for problem tickets details
+      const page = await this.copyTemplatePageWithOverlay(2)
+      const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+      const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
+      
+      const { width, height } = page.getSize()
+      const tealColor = rgb(0.06, 0.46, 0.43)
+      const textColor = rgb(0.2, 0.2, 0.2)
+      const redColor = rgb(0.8, 0.2, 0.2)
+      
+      // Page title with page number if multiple pages
+      const pageTitle = totalPages > 1 ? 
+        `Open Problem Records (All Time) - Page ${pageNum + 1} of ${totalPages}` :
+        'Open Problem Records (All Time)'
+      
+      page.drawText(pageTitle, {
+        x: 50,
+        y: height - 60,
+        size: 20,
+        font: boldFont,
+        color: tealColor,
+      })
+      
+      // Summary - all tickets are open since we filtered for open only (only on first page)
+      if (pageNum === 0) {
+        const urgentProblems = problemTickets.filter(t => t.priority === 'Urgent').length
+        const highProblems = problemTickets.filter(t => t.priority === 'High').length
+        
+        page.drawText(`Total Open Problem Records: ${problemTickets.length} (All Time)`, {
+          x: 50, y: height - 100, size: 12, font: font, color: textColor,
+        })
+        page.drawText(`Urgent: ${urgentProblems} | High: ${highProblems} | Others: ${problemTickets.length - urgentProblems - highProblems}`, {
+          x: 50, y: height - 120, size: 12, font: font, color: textColor,
+        })
+      }
+      
+      // Table headers - including JIRA ref as requested
+      const tableY = height - 180
+      const headerHeight = 20
+      const rowHeight = 18
+      const columnX = [50, 130, 200, 330, 420, 510]
+      const headers = ['Ticket ID', 'JIRA Ref', 'Summary', 'Priority', 'Status', 'Agent']
+      
+      // Draw header background
+      page.drawRectangle({
+        x: 50, y: tableY - 5, width: width - 100, height: headerHeight,
+        color: rgb(0.9, 0.9, 0.9),
+      })
+      
+      // Draw headers
+      headers.forEach((header, index) => {
+        page.drawText(header, {
+          x: columnX[index], y: tableY + 5, size: 10, font: boldFont, color: textColor,
+        })
+      })
+      
+      // Draw ticket data rows for this page
+      pageTickets.forEach((ticket, index) => {
+        const y = tableY - headerHeight - (index * rowHeight)
+        const rowColor = index % 2 === 0 ? rgb(0.98, 0.98, 0.98) : rgb(1, 1, 1)
+        
+        // Draw row background
+        page.drawRectangle({
+          x: 50, y: y - 5, width: width - 100, height: rowHeight,
+          color: rowColor,
+        })
+        
+        // Draw row data - truncate summary to 25 characters like SLA compliance
+        const truncatedSummary = (ticket.subject || 'No Subject').length > 25 ? 
+          (ticket.subject || 'No Subject').substring(0, 25) + '...' : 
+          (ticket.subject || 'No Subject')
+        
+        const rowData = [
+          ticket.ticketId || 'N/A',
+          ticket.jiraRef || 'N/A',
+          truncatedSummary,
+          ticket.priority || 'N/A',
+          ticket.status || 'N/A',
+          ticket.agent || 'N/A',
+        ]
+        
+        rowData.forEach((data, colIndex) => {
+          const priorityColor = ticket.priority === 'Urgent' ? redColor : textColor
+          let cellColor = textColor
+          
+          if (colIndex === 3) cellColor = priorityColor // Priority column
+          // Status column - all are open so no special color needed
+          
+          page.drawText(data, {
+            x: columnX[colIndex], y: y + 2, size: 8, font: font, 
+            color: cellColor,
+          })
+        })
+      })
+      
+      // Show page info at bottom
+      page.drawText(`Page ${pageNum + 1} of ${totalPages} | Showing ${startIndex + 1}-${Math.min(endIndex, problemTickets.length)} of ${problemTickets.length} tickets`, {
+        x: 50, y: 50, size: 10, font: font, color: textColor,
+      })
+    }
+  }
+
+  private async createEscalationProcessPageWithTemplate(): Promise<void> {
+    try {
+      // Load the EscalationProcess.pdf from public folder
+      const escalationPdfBytes = await fetch('/EscalationProcess.pdf').then(res => res.arrayBuffer())
+      const escalationDoc = await PDFDocument.load(escalationPdfBytes)
+      
+      // Copy all pages from the escalation process document
+      const escalationPages = await this.newDoc!.copyPages(escalationDoc, escalationDoc.getPageIndices())
+      
+      // Add each page to the main document
+      escalationPages.forEach(page => {
+        this.newDoc!.addPage(page)
+      })
+      
+    } catch (error) {
+      console.error('Error loading EscalationProcess.pdf:', error)
+      
+      // Create a fallback page if the PDF can't be loaded
+      const page = await this.copyTemplatePageWithOverlay(2)
+      const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
+      const boldFont = await this.newDoc!.embedFont(StandardFonts.HelveticaBold)
+      
+      const { height } = page.getSize()
+      const tealColor = rgb(0.06, 0.46, 0.43)
+      const textColor = rgb(0.2, 0.2, 0.2)
+      
+      // Page title
+      page.drawText('Escalation Process', {
+        x: 50,
+        y: height - 60,
+        size: 20,
+        font: boldFont,
+        color: tealColor,
+      })
+      
+      page.drawText('Escalation process document could not be loaded.', {
+        x: 50, y: height - 120, size: 14, font: font, color: textColor,
+      })
+      
+      page.drawText('Please contact your system administrator for the escalation process details.', {
+        x: 50, y: height - 150, size: 12, font: font, color: textColor,
+      })
     }
   }
 }

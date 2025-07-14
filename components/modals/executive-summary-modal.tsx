@@ -57,7 +57,7 @@ export function ExecutiveSummaryModal({
       
       const generatedSummary = `Executive Summary - Service Analytics Review
 
-We are pleased to present this comprehensive service analytics review covering ${companyText} ${sdmText} for the period of ${periodText}. This report provides key insights into our service delivery performance and operational metrics.
+We are pleased to present this comprehensive service analytics review covering ${companyText} for the period of ${periodText}. This report provides key insights into our service delivery performance and operational metrics.
 
 Key Performance Highlights:
 
