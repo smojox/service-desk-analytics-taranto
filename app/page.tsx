@@ -51,7 +51,7 @@ import { TicketStatusChart } from "@/components/charts/ticket-status-chart"
 import { SLAComplianceModal } from "@/components/modals/sla-compliance-modal"
 import { AIInsightsModal } from "@/components/modals/ai-insights-modal"
 import { MonthlyReviewModal } from "@/components/modals/monthly-review-modal"
-import { ExecutiveSummaryModal } from "@/components/modals/executive-summary-modal"
+import { ExecutiveSummaryModal, PageSelectionOptions } from "@/components/modals/executive-summary-modal"
 import { usePDFExport } from "@/components/pdf-export"
 import { freshdeskClient } from "@/lib/freshdesk-client"
 import { toast } from "sonner"
@@ -321,7 +321,7 @@ export default function SupportDashboard() {
   }
 
   // Handle PDF export with executive summary
-  const handlePDFExportWithSummary = async (executiveSummary: string) => {
+  const handlePDFExportWithSummary = async (executiveSummary: string, pageSelection: PageSelectionOptions) => {
     try {
       await exportToPDF({
         tickets: getFilteredTickets(), // For metrics and other filtered data
@@ -331,7 +331,8 @@ export default function SupportDashboard() {
         selectedSDM: selectedSDM === 'all' ? undefined : selectedSDM,
         selectedCompany: selectedCompany === 'all' ? undefined : selectedCompany,
         selectedDateFilter,
-        executiveSummary
+        executiveSummary,
+        pageSelection
       })
     } catch (error) {
       console.error('Error generating PDF:', error)

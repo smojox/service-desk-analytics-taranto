@@ -3,6 +3,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { TicketData } from '@/lib/csv-parser'
 import { DashboardMetrics, ChartData } from '@/lib/data-processor'
+import { PageSelectionOptions } from '@/components/modals/executive-summary-modal'
 
 interface PDFExportProps {
   tickets: TicketData[]
@@ -13,6 +14,7 @@ interface PDFExportProps {
   selectedCompany?: string
   selectedDateFilter?: string
   executiveSummary?: string
+  pageSelection?: PageSelectionOptions
 }
 
 export class ClientServiceReportGenerator {
@@ -25,7 +27,7 @@ export class ClientServiceReportGenerator {
   }
 
   async generateReport(data: PDFExportProps): Promise<void> {
-    const { metrics, tickets, allTickets, chartData, selectedSDM, selectedCompany, selectedDateFilter, executiveSummary } = data
+    const { metrics, tickets, allTickets, chartData, selectedSDM, selectedCompany, selectedDateFilter, executiveSummary, pageSelection } = data
     
     try {
       // Load template PDF
@@ -36,29 +38,58 @@ export class ClientServiceReportGenerator {
       
       // Copy and modify specific pages from template
       await this.createTitlePageWithTemplate(selectedCompany, selectedDateFilter, selectedSDM)
-      await this.createAgendaPageWithTemplate(executiveSummary) // Pass executiveSummary to include it in agenda
+      await this.createAgendaPageWithTemplate(executiveSummary, pageSelection) // Pass pageSelection to filter agenda
       
       // Add executive summary page if provided
       if (executiveSummary && executiveSummary.trim()) {
         await this.createExecutiveSummaryPageWithTemplate(executiveSummary)
       }
       
-      await this.createServiceReportPageWithTemplate(metrics, tickets, chartData)
-      await this.createSLADetailPageWithTemplate(metrics, tickets)
-      
-      // Add escalated tickets page only if escalations exist
-      const escalatedTickets = tickets.filter(t => t.sdmEscalation === 'true')
-      if (escalatedTickets.length > 0) {
-        await this.createEscalatedTicketsPageWithTemplate(escalatedTickets)
+      // Add pages based on selection
+      if (pageSelection?.keyPerformanceMetrics !== false) {
+        await this.createServiceReportPageWithTemplate(metrics, tickets, chartData)
       }
       
-      await this.createMonthlyChartsPageWithTemplate(chartData, allTickets || tickets, selectedCompany, selectedSDM)
-      await this.createTicketTypesPieChartPageWithTemplate(chartData)
-      await this.createTicketAgeBreakdownPageWithTemplate(chartData, selectedCompany)
-      await this.createOpenTicketsPageWithTemplate(allTickets || tickets, selectedCompany)
-      await this.createProblemTicketsPageWithTemplate(allTickets || tickets, selectedCompany)
-      await this.createQuestionsPageWithTemplate()
-      await this.createEscalationProcessPageWithTemplate()
+      if (pageSelection?.slaComplianceAnalysis !== false) {
+        await this.createSLADetailPageWithTemplate(metrics, tickets)
+      }
+      
+      // Add escalated tickets page only if selected and escalations exist
+      if (pageSelection?.escalatedTicketsAnalysis !== false) {
+        const escalatedTickets = tickets.filter(t => t.sdmEscalation === 'true')
+        if (escalatedTickets.length > 0) {
+          await this.createEscalatedTicketsPageWithTemplate(escalatedTickets)
+        }
+      }
+      
+      if (pageSelection?.monthlyCreatedVsResolved !== false) {
+        await this.createMonthlyChartsPageWithTemplate(chartData, allTickets || tickets, selectedCompany, selectedSDM)
+      }
+      
+      if (pageSelection?.openTicketsByType !== false) {
+        await this.createTicketTypesPieChartPageWithTemplate(chartData)
+      }
+      
+      if (pageSelection?.breakdownByAgeOfTicket !== false) {
+        await this.createTicketAgeBreakdownPageWithTemplate(chartData, selectedCompany)
+      }
+      
+      if (pageSelection?.openIncidentsAndServiceRequests !== false) {
+        await this.createOpenTicketsPageWithTemplate(allTickets || tickets, selectedCompany)
+      }
+      
+      if (pageSelection?.openProblemRecords !== false) {
+        await this.createProblemTicketsPageWithTemplate(allTickets || tickets, selectedCompany)
+      }
+      
+      if (pageSelection?.questionsAndDiscussion !== false) {
+        await this.createQuestionsPageWithTemplate()
+      }
+      
+      if (pageSelection?.escalationProcess !== false) {
+        await this.createEscalationProcessPageWithTemplate()
+      }
+      
       await this.createFinalPageWithTemplate()
       
       // Generate and download
@@ -173,7 +204,7 @@ export class ClientServiceReportGenerator {
     })
   }
 
-  private async createAgendaPageWithTemplate(executiveSummary?: string): Promise<void> {
+  private async createAgendaPageWithTemplate(executiveSummary?: string, pageSelection?: PageSelectionOptions): Promise<void> {
     // Use Page 2 (index 1) of template
     const page = await this.copyTemplatePageWithOverlay(1)
     const font = await this.newDoc!.embedFont(StandardFonts.Helvetica)
@@ -198,19 +229,37 @@ export class ClientServiceReportGenerator {
       agendaItems.push('Executive Summary')
     }
     
-    // Add remaining agenda items
-    agendaItems.push(
-      'Key Performance Metrics',
-      'SLA Compliance Analysis', 
-      'Escalated Tickets Analysis',
-      'Monthly Created vs Resolved Tickets',
-      'Open Tickets by Type',
-      'Breakdown by Age of Ticket',
-      'Open Incidents and Service Requests',
-      'Open Problem Records',
-      'Questions & Discussion',
-      'Escalation Process'
-    )
+    // Add remaining agenda items based on selection
+    if (pageSelection?.keyPerformanceMetrics !== false) {
+      agendaItems.push('Key Performance Metrics')
+    }
+    if (pageSelection?.slaComplianceAnalysis !== false) {
+      agendaItems.push('SLA Compliance Analysis')
+    }
+    if (pageSelection?.escalatedTicketsAnalysis !== false) {
+      agendaItems.push('Escalated Tickets Analysis')
+    }
+    if (pageSelection?.monthlyCreatedVsResolved !== false) {
+      agendaItems.push('Monthly Created vs Resolved Tickets')
+    }
+    if (pageSelection?.openTicketsByType !== false) {
+      agendaItems.push('Open Tickets by Type')
+    }
+    if (pageSelection?.breakdownByAgeOfTicket !== false) {
+      agendaItems.push('Breakdown by Age of Ticket')
+    }
+    if (pageSelection?.openIncidentsAndServiceRequests !== false) {
+      agendaItems.push('Open Incidents and Service Requests')
+    }
+    if (pageSelection?.openProblemRecords !== false) {
+      agendaItems.push('Open Problem Records')
+    }
+    if (pageSelection?.questionsAndDiscussion !== false) {
+      agendaItems.push('Questions & Discussion')
+    }
+    if (pageSelection?.escalationProcess !== false) {
+      agendaItems.push('Escalation Process')
+    }
     
     const startY = height - 206 // Move down 2cm more (was 150, now 206 = 150 + 56 points)
     const itemHeight = 25

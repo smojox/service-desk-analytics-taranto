@@ -5,13 +5,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, FileText, Download, Sparkles } from 'lucide-react'
+import { Checkbox } from "@/components/ui/checkbox"
+import { Loader2, FileText, Download, Sparkles, Settings } from 'lucide-react'
 import { DashboardMetrics } from '@/lib/data-processor'
+
+export interface PageSelectionOptions {
+  keyPerformanceMetrics: boolean
+  slaComplianceAnalysis: boolean
+  escalatedTicketsAnalysis: boolean
+  monthlyCreatedVsResolved: boolean
+  openTicketsByType: boolean
+  breakdownByAgeOfTicket: boolean
+  openIncidentsAndServiceRequests: boolean
+  openProblemRecords: boolean
+  questionsAndDiscussion: boolean
+  escalationProcess: boolean
+}
 
 interface ExecutiveSummaryModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (summary: string) => void
+  onConfirm: (summary: string, pageSelection: PageSelectionOptions) => void
   metrics: DashboardMetrics
   selectedCompany?: string
   selectedSDM?: string
@@ -30,6 +44,18 @@ export function ExecutiveSummaryModal({
   const [summary, setSummary] = useState<string>('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [hasGenerated, setHasGenerated] = useState(false)
+  const [pageSelection, setPageSelection] = useState<PageSelectionOptions>({
+    keyPerformanceMetrics: true,
+    slaComplianceAnalysis: true,
+    escalatedTicketsAnalysis: true,
+    monthlyCreatedVsResolved: true,
+    openTicketsByType: true,
+    breakdownByAgeOfTicket: true,
+    openIncidentsAndServiceRequests: true,
+    openProblemRecords: true,
+    questionsAndDiscussion: true,
+    escalationProcess: true,
+  })
 
   // Generate AI summary when modal opens
   useEffect(() => {
@@ -107,13 +133,29 @@ We look forward to discussing these results and our continued partnership.`)
   }
 
   const handleConfirm = () => {
-    onConfirm(summary)
+    onConfirm(summary, pageSelection)
     onClose()
   }
 
   const handleSkip = () => {
-    onConfirm('')
+    onConfirm('', pageSelection)
     onClose()
+  }
+
+  const handlePageSelectionChange = (key: keyof PageSelectionOptions, checked: boolean) => {
+    setPageSelection(prev => ({
+      ...prev,
+      [key]: checked
+    }))
+  }
+
+  const handleSelectAll = () => {
+    const allSelected = Object.values(pageSelection).every(value => value)
+    const newSelection = Object.keys(pageSelection).reduce((acc, key) => {
+      acc[key as keyof PageSelectionOptions] = !allSelected
+      return acc
+    }, {} as PageSelectionOptions)
+    setPageSelection(newSelection)
   }
 
   const getDateFilterLabel = (dateFilter?: string): string => {
@@ -169,6 +211,122 @@ We look forward to discussing these results and our continued partnership.`)
                   placeholder="Executive summary will appear here..."
                 />
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between text-sm">
+                <div className="flex items-center">
+                  <Settings className="h-4 w-4 text-gray-600 mr-2" />
+                  Page Selection
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleSelectAll}
+                  className="text-xs"
+                >
+                  {Object.values(pageSelection).every(value => value) ? 'Deselect All' : 'Select All'}
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Choose which pages to include in your PDF export. All pages are selected by default.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="keyPerformanceMetrics"
+                    checked={pageSelection.keyPerformanceMetrics}
+                    onCheckedChange={(checked) => handlePageSelectionChange('keyPerformanceMetrics', checked as boolean)}
+                  />
+                  <label htmlFor="keyPerformanceMetrics" className="text-sm">Key Performance Metrics</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="slaComplianceAnalysis"
+                    checked={pageSelection.slaComplianceAnalysis}
+                    onCheckedChange={(checked) => handlePageSelectionChange('slaComplianceAnalysis', checked as boolean)}
+                  />
+                  <label htmlFor="slaComplianceAnalysis" className="text-sm">SLA Compliance Analysis</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="escalatedTicketsAnalysis"
+                    checked={pageSelection.escalatedTicketsAnalysis}
+                    onCheckedChange={(checked) => handlePageSelectionChange('escalatedTicketsAnalysis', checked as boolean)}
+                  />
+                  <label htmlFor="escalatedTicketsAnalysis" className="text-sm">Escalated Tickets Analysis</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="monthlyCreatedVsResolved"
+                    checked={pageSelection.monthlyCreatedVsResolved}
+                    onCheckedChange={(checked) => handlePageSelectionChange('monthlyCreatedVsResolved', checked as boolean)}
+                  />
+                  <label htmlFor="monthlyCreatedVsResolved" className="text-sm">Monthly Created vs Resolved</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="openTicketsByType"
+                    checked={pageSelection.openTicketsByType}
+                    onCheckedChange={(checked) => handlePageSelectionChange('openTicketsByType', checked as boolean)}
+                  />
+                  <label htmlFor="openTicketsByType" className="text-sm">Open Tickets by Type</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="breakdownByAgeOfTicket"
+                    checked={pageSelection.breakdownByAgeOfTicket}
+                    onCheckedChange={(checked) => handlePageSelectionChange('breakdownByAgeOfTicket', checked as boolean)}
+                  />
+                  <label htmlFor="breakdownByAgeOfTicket" className="text-sm">Breakdown by Age of Ticket</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="openIncidentsAndServiceRequests"
+                    checked={pageSelection.openIncidentsAndServiceRequests}
+                    onCheckedChange={(checked) => handlePageSelectionChange('openIncidentsAndServiceRequests', checked as boolean)}
+                  />
+                  <label htmlFor="openIncidentsAndServiceRequests" className="text-sm">Open Incidents & Service Requests</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="openProblemRecords"
+                    checked={pageSelection.openProblemRecords}
+                    onCheckedChange={(checked) => handlePageSelectionChange('openProblemRecords', checked as boolean)}
+                  />
+                  <label htmlFor="openProblemRecords" className="text-sm">Open Problem Records</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="questionsAndDiscussion"
+                    checked={pageSelection.questionsAndDiscussion}
+                    onCheckedChange={(checked) => handlePageSelectionChange('questionsAndDiscussion', checked as boolean)}
+                  />
+                  <label htmlFor="questionsAndDiscussion" className="text-sm">Questions & Discussion</label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="escalationProcess"
+                    checked={pageSelection.escalationProcess}
+                    onCheckedChange={(checked) => handlePageSelectionChange('escalationProcess', checked as boolean)}
+                  />
+                  <label htmlFor="escalationProcess" className="text-sm">Escalation Process</label>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
