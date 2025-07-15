@@ -1,5 +1,0 @@
-1. Only show the header of the page at load up. We only want to populate the webpage once the CSV has been uploaded. Just show the Upload CSV icon.
-2. Only allow Companies to be displayed in the drop down if an SDM is selected. it limits the list to those with associated tickets just for that SDM.
-3. Rather the a date range picker at the top, lets group the dates by Creation Date months. Also have the option for Last 3 months, Last 6 months or Last Year.
-3. In the ticket Volume Chart, lets include a chart which groups the Created Tickets by Month and Resolved Tickets in a line chart. Show the last year as standard or if the date uploaded is less, use the full data regardless of filter.
-4. In the ticket type breakdown Chart, for Open tickets (not resolved or closed) break down the tickets into type in a pie chart.
