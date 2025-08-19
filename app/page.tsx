@@ -678,7 +678,13 @@ export default function SupportDashboard() {
               <Button variant="ghost" size="icon" className="text-gray-300 hover:text-white">
                 <Bell className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="text-gray-300 hover:text-white">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-gray-300 hover:text-white"
+                onClick={() => router.push('/tools')}
+                title="Service Desk Tools"
+              >
                 <Settings className="h-5 w-5" />
               </Button>
             </div>
