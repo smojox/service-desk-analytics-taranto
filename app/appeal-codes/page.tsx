@@ -12,10 +12,16 @@ import { useRouter } from "next/navigation"
 
 // Notice Types mapping
 const NOTICE_TYPES = {
-  1: "Parking, Moving Traffic, Littering from Vehicle, Household Waste, Commercial/Industrial Waste, London Lorry Control Scheme, Road User Charging",
+  1: "Parking",
   2: "Being in a bus lane",
-  8: "Clamp Vehicle", 
-  9: "Remove Vehicle"
+  3: "RUCA (Road User Charging – Dart Charge, Durham, Merseyflow)",
+  4: "Moving Traffic",
+  5: "Spare",
+  6: "Clean Air Zones",
+  7: "Littering from Vehicles",
+  8: "Clamp",
+  9: "Remove",
+  0: "Spare"
 } as const
 
 // Appeal code generation and validation logic
@@ -337,8 +343,14 @@ export default function AppealCodesPage() {
                           The CSV will include appeal codes for all notice types for each day in the selected range:
                         </p>
                         <ul className="text-xs text-blue-600 space-y-1">
+                          <li>• Type 0: {NOTICE_TYPES[0]}</li>
                           <li>• Type 1: {NOTICE_TYPES[1]}</li>
                           <li>• Type 2: {NOTICE_TYPES[2]}</li>
+                          <li>• Type 3: {NOTICE_TYPES[3]}</li>
+                          <li>• Type 4: {NOTICE_TYPES[4]}</li>
+                          <li>• Type 5: {NOTICE_TYPES[5]}</li>
+                          <li>• Type 6: {NOTICE_TYPES[6]}</li>
+                          <li>• Type 7: {NOTICE_TYPES[7]}</li>
                           <li>• Type 8: {NOTICE_TYPES[8]}</li>
                           <li>• Type 9: {NOTICE_TYPES[9]}</li>
                         </ul>
