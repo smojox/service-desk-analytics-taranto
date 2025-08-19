@@ -26,6 +26,27 @@ export class ClientServiceReportGenerator {
     this.newDoc = null
   }
 
+  // Helper function to convert priority text to Priority numbers
+  private convertPriorityToNumber(priority: string, type?: string): string {
+    // Special case: Question / Severity 5 is always Priority 5
+    if (type && type.toLowerCase().includes('question') && type.toLowerCase().includes('severity 5')) {
+      return 'Priority 5'
+    }
+    
+    switch (priority?.toLowerCase()) {
+      case 'urgent':
+        return 'Priority 1'
+      case 'high':
+        return 'Priority 2'
+      case 'medium':
+        return 'Priority 3'
+      case 'low':
+        return 'Priority 4'
+      default:
+        return priority || 'N/A'
+    }
+  }
+
   async generateReport(data: PDFExportProps): Promise<void> {
     const { metrics, tickets, allTickets, chartData, selectedSDM, selectedCompany, selectedDateFilter, executiveSummary, pageSelection } = data
     
@@ -1490,8 +1511,8 @@ export class ClientServiceReportGenerator {
       const tableY = height - 180
       const headerHeight = 20
       const rowHeight = 18
-      const columnX = [50, 130, 330, 420, 510, 600]
-      const headers = ['Ticket ID', 'Summary', 'Created', 'Priority', 'Type', 'Agent']
+      const columnX = [50, 110, 250, 310, 370, 430, 490, 550]
+      const headers = ['Ticket ID', 'Summary', 'Created', 'Priority', 'Type', 'Status', 'Agent', 'Client Ref']
       
       // Draw header background
       page.drawRectangle({
@@ -1522,13 +1543,20 @@ export class ClientServiceReportGenerator {
           (ticket.subject || 'No Subject').substring(0, 25) + '...' : 
           (ticket.subject || 'No Subject')
         
+        // Truncate client reference if too long
+        const truncatedClientRef = (ticket.clientReference || 'N/A').length > 15 ? 
+          (ticket.clientReference || 'N/A').substring(0, 15) + '...' : 
+          (ticket.clientReference || 'N/A')
+        
         const rowData = [
           ticket.ticketId || 'N/A',
           truncatedSummary,
-          ticket.createdTime ? new Date(ticket.createdTime).toLocaleDateString() : 'N/A',
-          ticket.priority || 'N/A',
+          ticket.createdTime ? new Date(ticket.createdTime).toLocaleDateString('en-GB') : 'N/A',
+          this.convertPriorityToNumber(ticket.priority, ticket.type),
           ticket.type || 'N/A',
+          ticket.status || 'N/A',
           ticket.agent || 'N/A',
+          truncatedClientRef,
         ]
         
         rowData.forEach((data, colIndex) => {
@@ -1604,12 +1632,12 @@ export class ClientServiceReportGenerator {
         })
       }
       
-      // Table headers - including JIRA ref as requested
+      // Table headers - including JIRA ref and Release version as requested
       const tableY = height - 180
       const headerHeight = 20
       const rowHeight = 18
-      const columnX = [50, 130, 200, 330, 420, 510]
-      const headers = ['Ticket ID', 'JIRA Ref', 'Summary', 'Priority', 'Status', 'Agent']
+      const columnX = [50, 120, 170, 240, 408, 476, 561, 631]
+      const headers = ['Ticket ID', 'Created', 'JIRA Ref', 'Summary', 'Priority', 'Status', 'Release Ver', 'Client Ref']
       
       // Draw header background
       page.drawRectangle({
@@ -1635,18 +1663,25 @@ export class ClientServiceReportGenerator {
           color: rowColor,
         })
         
-        // Draw row data - truncate summary to 25 characters like SLA compliance
-        const truncatedSummary = (ticket.subject || 'No Subject').length > 25 ? 
-          (ticket.subject || 'No Subject').substring(0, 25) + '...' : 
+        // Draw row data - truncate summary to 35 characters for more room
+        const truncatedSummary = (ticket.subject || 'No Subject').length > 35 ? 
+          (ticket.subject || 'No Subject').substring(0, 35) + '...' : 
           (ticket.subject || 'No Subject')
+        
+        // Truncate client reference if too long
+        const truncatedClientRef = (ticket.clientReference || 'N/A').length > 60 ? 
+          (ticket.clientReference || 'N/A').substring(0, 60) + '...' : 
+          (ticket.clientReference || 'N/A')
         
         const rowData = [
           ticket.ticketId || 'N/A',
+          ticket.createdTime ? new Date(ticket.createdTime).toLocaleDateString('en-GB') : 'N/A',
           ticket.jiraRef || 'N/A',
           truncatedSummary,
-          ticket.priority || 'N/A',
+          this.convertPriorityToNumber(ticket.priority, ticket.type),
           ticket.status || 'N/A',
-          ticket.agent || 'N/A',
+          ticket.releaseVersion || 'N/A',
+          truncatedClientRef,
         ]
         
         rowData.forEach((data, colIndex) => {
